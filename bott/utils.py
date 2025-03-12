@@ -104,10 +104,10 @@ def computeY(y_cand_full, y_target_full, numTiles):
     pixelTerm = pixelSSE(y_cand_full, y_target_full) #single value based on pixel
     return torch.cat((y_cand_tile,pixelTerm-tileTerm),dim=-1).unsqueeze(0) #y_pred
 
-def computeObjectiveC(y_pred): #TODO: using pixelSSE(y_pred_raw) may enhance the speed a bit?
-    return -((y_pred[...,:-1]-y_obsC[...,:-1]).pow(2).sum()+y_pred[...,-1]).unsqueeze(-1)
-    # return - (np.power( y_pred[:9]-y_obsC[:9], 2).sum() + y_pred[9] ) #pixelTerm - patchTerm #question: isn't it just the pixelTerm?
-    
+# def computeObjectiveC(y_pred): #TODO: using pixelSSE(y_pred_raw) may enhance the speed a bit?
+#     return -((y_pred[...,:-1]-y_obsC[...,:-1]).pow(2).sum()+y_pred[...,-1]).unsqueeze(-1)
+#     # return - (np.power( y_pred[:9]-y_obsC[:9], 2).sum() + y_pred[9] ) #pixelTerm - patchTerm #question: isn't it just the pixelTerm?
+
 # todo: consider using classicBO as a class and compositeBO as a class
 # then have add_data as a method for each class
 #todo: filePath can be initialized in the __init__ method
@@ -126,8 +126,9 @@ def add_data_composite(new_x, filePath, y_target_full, numTiles, x=None, y=None,
     if obj is None:
         obj = torch.tensor([],**tkw)
 
-    new_y = computeY(load(new_x, filePath),y_target_full,numTiles) # y is a tensor
-    new_obj = computeObjectiveC(new_y) # this is our objective
+    new_y_full = load(new_x, filePath)
+    new_y = computeY(new_y_full,y_target_full,numTiles) # tiles
+    new_obj = - pixelSSE(new_y_full, y_target_full) #SSE
 
     # x and obj are both 2D tensors that are nx1
     # y is a 3D tensor that is nx (numPatches**2 + 1) 
@@ -136,6 +137,45 @@ def add_data_composite(new_x, filePath, y_target_full, numTiles, x=None, y=None,
     obj = torch.cat((obj, torch.tensor(new_obj.clone().detach())),dim=0)
     return x.to(**tkw), y.to(**tkw), obj.to(**tkw)
 
+from botorch.sampling.normal import IIDNormalSampler #import package
+from botorch.sampling.normal import SobolQMCNormalSampler
+from botorch.utils.sampling import draw_sobol_samples
+from botorch.models.transforms import Standardize
+from botorch.models.transforms.input import Normalize
+
+def generate_initial_data(n_initial_points,lower, upper, filePath, y_target_full, numTiles,tkw=tkwargs):    
+    new_x = (
+            draw_sobol_samples(
+                bounds=torch.tensor([[lower,1], [upper,10]]).to(torch.double),
+                n=n_initial_points,
+                q=1,
+            )
+        ).to(**tkw)
+    for i in range(n_initial_points):
+        if i == 0:
+            x,y,obj = add_data_composite(new_x[i,...],filePath,y_target_full,numTiles)
+        else:
+            x,y,obj = add_data_composite(new_x[i,...],filePath,y_target_full,numTiles,x,y,obj)
+    return x,y,obj
+
+
+#todo: result = run_pipeline(y_target, method="tile") #patch, etc. 
+def run_optimization(y_target, filePath, numTiles, lower, upper, n_BO_points=30, n_initial_points=4, tkw=tkwargs):
+    '''
+    y_target: the target PACBED image
+    filePath: the path where the simulated PACBED images are saved
+    numTiles: number of tiles to divide the image
+    n_steps: number of optimization steps
+    n_initial_points: number of initial points
+    lower: lower bound for the thickness
+    upper: upper bound for the thickness
+    tkw: torch keyword arguments
+    '''
+    x,y,obj = generate_initial_data(n_initial_points,lower, upper, filePath, y_target, numTiles, tkw)
+    
+
+
+#todo: plotting functions in a separate file
 
 # def initY(path, testModeX=None):#image in question. 
 #     '''
