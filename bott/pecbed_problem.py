@@ -58,12 +58,12 @@ class PECBEDCalibration(SyntheticTestFunction):
         numUC = int(x/self.dx) # number of unit cells in z direction (variable x)
         sc = self.atoms * (16,16,numUC) #TODO: may need to do the rounding instead
     
-        fp = FrozenPhonons(sc,20,{'Sr':.088,'Ti':.0746,'O':.0963},seed=1)
-        potential = Potential(fp,gpts=512, projection='infinite',
+        # fp = FrozenPhonons(sc,20,{'Sr':.088,'Ti':.0746,'O':.0963},seed=1)
+        potential = Potential(sc,gpts=512, projection='infinite',
                             slice_thickness= 2,
                             device='gpu', parametrization='kirkland') #TODO: to add storage = 'cpu',precalculate=True,
         probe = Probe(energy=200e3, semiangle_cutoff=19.1,tilt=(tX,tY),
-                    device='gpu')
+                    device='cpu')
         probe.grid.match(potential)
     
         pixelated_detector = PixelatedDetector(max_angle=45)
