@@ -10,14 +10,10 @@ The FreeSolv function network test problem.
 
 import glob
 import os
-import warnings
-from datetime import datetime
 from typing import List, Optional, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
-import scipy.ndimage
 import torch
 from abtem import *
 from ase.io import read
@@ -26,14 +22,18 @@ from PIL import Image
 from torch import Tensor
 
 
-class PECBEDCalibration(SyntheticTestFunction):
-    """PECBED Calibration Problem Class for Bayesian Optimization."""
+class PACBEDCalibration(SyntheticTestFunction):
+    """PACBED Calibration Problem Class for Bayesian Optimization."""
     
-    def __init__(self, **kwargs) -> None:
+    def __init__(self, partition_type: str='square', num_tiles: int=9, **kwargs) -> None:
         """Initialize the function network.
 
         Args:
-            node_costs: cost of evaluating each of the nodes in the function network.
+            partition_type: A str specifying type of partition to be used. 
+                Options:    'vert': partiioning vertically, 
+                            'square': partitioning as square grids, 
+                            'domain': partitioning using domain knowledge 
+            num_tiles: A int specifying number of tiles to be partitioned
 
         Returns:
             None
@@ -42,7 +42,16 @@ class PECBEDCalibration(SyntheticTestFunction):
         self.current_directory = os.getcwd() # Get the working directory
         self.atoms = read('/Users/pbuathong/Desktop/BoTT_data/SrTiO3.cif')  #TODO change it
         self.dx = self.atoms.cell[2, 2]
-        self.fpath = '/Users/pbuathong/bott/results'
+        self.fpath = '/Users/pbuathong/bott/'
+        self.trueopt = np.array([[310,5,-10]])
+        self.true_y = self.load(self.trueopt) #[simulate(x_val) for x_val in x_obs]
+        self.partition_type = partition_type
+        self.num_tiles = num_tiles
+        if self.partition_type == 'domain' and self.num_tiles!=2:
+            print(f"Partition type: {self.partition_type} only supports num_tiles=2.")
+            print(f"Reassigning {self.num_tiles} to 2!")
+            self.num_tiles=2
+
 
     
     def simulate(self,x,tX,tY):
@@ -61,7 +70,7 @@ class PECBEDCalibration(SyntheticTestFunction):
         # fp = FrozenPhonons(sc,20,{'Sr':.088,'Ti':.0746,'O':.0963},seed=1)
         potential = Potential(sc,gpts=512, projection='infinite',
                             slice_thickness= 2,
-                            device='gpu', parametrization='kirkland') #TODO: to add storage = 'cpu',precalculate=True,
+                            device='cpu', parametrization='kirkland') #TODO: to add storage = 'cpu',precalculate=True,
         probe = Probe(energy=200e3, semiangle_cutoff=19.1,tilt=(tX,tY),
                     device='cpu')
         probe.grid.match(potential)
@@ -86,7 +95,7 @@ class PECBEDCalibration(SyntheticTestFunction):
 
         numUC = int(thickness/self.dx)#number of unit cells in z direction (variable x)
         tag = '{:04d}.tiff'.format(int(numUC*self.dx))
-        imgPath = 'TiltX_{}_TiltY_{}_Thickness_'.format(int(tilt1),int(tilt2)) +tag
+        imgPath = 'image/TiltX_{}_TiltY_{}_Thickness_'.format(int(tilt1),int(tilt2)) +tag
         
         try: #load PACBED from the directory
             pacbed = plt.imread(imgPath)
@@ -105,4 +114,30 @@ class PECBEDCalibration(SyntheticTestFunction):
     
     def evaluate(self,):
         return None
+    
+    def VertTiles(self,X:Tensor):
+        arr = torch.Tensor([]).to(torch.double);
+        ind = int(X.shape[0]//self.num_tiles)
+        for i in range(ind):
+            arr = torch.cat((arr, torch.mean(X[:,i*ind:(i+1)*ind]).unsqueeze(-1) *1e1), dim=-1)
+        return arr
+    
+    def domainKnowledgeTile(self,X:Tensor):
+        #create a mask to divide the image into central and peripheral regions
+        ind = X.shape[0]
+        mask = np.zeros((ind,ind)).astype(bool)
+        mask[70:-70,70:-70] = True #central region of the image #todo systematic way: CHT?
+        arr = torch.Tensor([]);
+        arr = torch.cat((arr, torch.mean(X[mask]).unsqueeze(-1) *1e1), dim=-1)
+        arr = torch.cat((arr, torch.mean(X[~mask]).unsqueeze(-1) *1e1), dim=-1)
+        return arr
+    
+    def squareTiles(self, X:Tensor):
+        arr = torch.Tensor([]);
+        pixPerTile = int(X.shape[0]//self.num_tiles)
+        for i in range(self.num_tiles):
+            for j in range(self.num_tiles):
+                tile = torch.mean(X[...,pixPerTile*i:pixPerTile*(i+1),...,pixPerTile*j:pixPerTile*(j+1)]).unsqueeze(-1)
+                arr = torch.cat((arr,tile*1e1),dim=-1)
+        return arr
     
