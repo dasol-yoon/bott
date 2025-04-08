@@ -8,7 +8,7 @@ All notable changes to this project will be documented in this file.
 - Add `CHANGELOG.md` to log the changes and archive todos/ideas
 - Add `.gitignore` to allow keeping some large files untracked by Git
 - Modify `__init_.py` by commenting out all import and add a `__version__` variable
-- 
+- Refactor the `simulate_cbed` function and make it cpu/gpu compatible
 
 # Note
 - In physics community we usually do f(x) = y, here y is our diffraciton patterns. Since we have a physics output and a model objective, it might be cleaner to reserve all the "y" for diffraction pattern, and use explictly "loss" or "objective" for the surrogate model output. "objective" might be better for optimization community.
