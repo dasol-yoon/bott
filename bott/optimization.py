@@ -32,7 +32,7 @@ def run_one_trial(
         trial: int,
         n_init_evals: int,
         max_iter: int,
-        matrics: List[str]=['obs_val'],
+        metrics: List[str]=['obs_val'],
         objective: Optional[MCAcquisitionObjective] = None,
         noisy: Optional[bool]=False,
 )-> None:

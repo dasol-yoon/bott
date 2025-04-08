@@ -11,6 +11,7 @@ All notable changes to this project will be documented in this file.
 - 
 
 # Note
+- In physics community we usually do f(x) = y, here y is our diffraciton patterns. Since we have a physics output and a model objective, it might be cleaner to reserve all the "y" for diffraction pattern, and use explictly "loss" or "objective" for the surrogate model output. "objective" might be better for optimization community.
 
 # Package architecture as of 2025.04.08
 - __init__y     : keeps the version
