@@ -1,5 +1,45 @@
 # utils are for helper functions that don't fit elsewhere
 import numpy as np
+import torch
+
+def create_circular_mask(
+    height: int,
+    width: int,
+    radius: float = 0.3,  # Radius as a fraction of min(height, width)
+    center: tuple = None,
+    device = None
+) -> torch.Tensor:
+    """
+    Create a circular binary mask.
+
+    Args:
+        height: Height of the mask.
+        width: Width of the mask.
+        radius: Radius of the circle as a fraction of the minimum dimension.
+        center: Center coordinates (y, x) of the circle. If None, uses the center of the image.
+        device: Device to create the mask on. If None, uses default device.
+
+    Returns:
+        A binary mask tensor where True indicates pixels inside the circle.
+    """
+    if center is None:
+        center = (height / 2, width / 2)
+    
+    # Create a meshgrid for the mask
+    y, x = torch.meshgrid(
+        torch.arange(height, device=device),
+        torch.arange(width, device=device),
+        indexing='ij'
+    )
+    
+    # Calculate distance from center for each pixel
+    distance = torch.sqrt((y - center[0])**2 + (x - center[1])**2)
+    
+    # Create the circular mask
+    r = min(height, width) * radius
+    mask = distance <= r
+    
+    return mask
 
 def make_output_filenm(X):
     tilt_x = str(round(X[1]))

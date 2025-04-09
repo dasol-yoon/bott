@@ -2,6 +2,9 @@
 
 All notable changes to this project will be documented in this file.
 
+## 2025.04.09
+- Refine `reduction` module. Generalize the vert/hori tiling into `get_long_tiles`. Rename `domainKnowledgeTile` into `circular_tiles` for clarity. Enable overlapping tiles by specifying "tile_width" and allowing padding the measurement. Enable different reduce methods including "mean", "sum", and "False/None" to return the original tiles for debugging purpose.
+
 ## 2025.04.08
 - Rename modules into `physics_models` and `problem`
 - Add `run_bott.ipynb` notebook for temporarily development
@@ -18,7 +21,6 @@ All notable changes to this project will be documented in this file.
 
 # TODO
 - `loss` might need some discussion of whether we need to return a list or not
-- `reduction` needs more work to refine the reduction methods
 - Need to make sure we have the correct normalization and resampling for both the measurement_true and measurement_simu
 
 # Package architecture as of 2025.04.08
