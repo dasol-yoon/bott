@@ -1,6 +1,12 @@
 # utils are for helper functions that don't fit elsewhere
 import numpy as np
 
+def make_output_filenm(X):
+    tilt_x = str(round(X[1]))
+    tilt_y = str(round(X[2]))
+    thickness = str(round(X[0])).zfill(4)
+    return f"TiltX_{tilt_x}_TiltY_{tilt_y}_Thickness_{thickness}.tif"
+
 def normalize_arr(arr, norm_type='zero_to_one'):
     
     if norm_type == 'zero_to_one':

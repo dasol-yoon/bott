@@ -1,6 +1,86 @@
 # Put the forward methods (like f(tilt, thickness) = PACBED)
+# We may turn this into a class if we have other physics models
 from bott.utils import get_default_abTEM_params
 
+def simulate_potential(thickness, params_abTEM=None):
+    '''
+    This one is for future gradient descent purpose
+    The potential will be returned, and we'll generate the measurement based on some in-house multislice simulation code with tilted propagator
+    
+    Note that the underlying potential array for this GD approach is fixed, and we're using GD to optimizer the tilted propafator parameterized by slice thickness.
+    Therefore, the computation complexity is fixed for the GD approach and our achievable thickness range could be a bit limited.
+    while the `simulate_cbed` would have the actual potential array with the right thickness and number of slices.
+    For fair comparison, we might want to fix a thickness and just do tilt optimization.
+    '''
+    
+    if params_abTEM is None:
+        params_abTEM = get_default_abTEM_params()
+     
+    # Unpack params_abTEM explictly
+    device_abtem = params_abTEM["device_abtem"]
+    path_crystal = params_abTEM["path_crystal"]
+
+    potential_extent_x = params_abTEM["potential_extent_x"]
+    potential_extent_y = params_abTEM["potential_extent_y"]
+    lateral_sampling = params_abTEM["lateral_sampling"]
+    vertical_sampling = params_abTEM["vertical_sampling"]
+    potential_parametrization = params_abTEM["potential_parametrization"]
+    potential_projection = params_abTEM["potential_projection"]
+    
+    random_seed = params_abTEM["random_seed"]
+    use_frozen_phonon = params_abTEM["use_frozen_phonon"]
+    num_phonon_configs = params_abTEM["num_phonon_configs"]
+    phonon_sigma = params_abTEM["phonon_sigma"]
+    
+    # Note that the printing are commented out
+    
+    # Setup imports
+    import ase
+    import abtem
+    import numpy as np
+    import dask
+
+    if device_abtem == 'gpu':
+        import cupy as xp
+        abtem.config.set({"dask.chunk-size-gpu" : "2048 MB"})
+        dask.config.set({"num_workers": 1})
+    elif device_abtem == 'cpu':
+        import numpy as xp
+    else:
+        raise ValueError(f"device_abtem '{device_abtem}' not implemented yet, please use 'cpu', or 'gpu'!")
+
+    # abtem configure
+    abtem.config.set({"local_diagnostics.progress_bar": False})
+    abtem.config.set({"device": device_abtem})
+    
+    # Setup cell
+    unit_cell = ase.io.read(path_crystal)
+    target_object_extent = np.array((potential_extent_x, potential_extent_y, thickness)) # Specimen range in Ang (x,y,z)
+    cell_constants = np.diag(unit_cell.cell)
+    super_cell_reps = np.ceil(target_object_extent / cell_constants).astype('int')
+    super_cell = unit_cell * super_cell_reps
+    # print(f"super_cell = {super_cell}")
+    
+    # Calculate the potential
+    if use_frozen_phonon:
+        # print(f"Using FrozenPhonons potential with {num_phonon_configs} configs")
+        atoms = abtem.FrozenPhonons(atoms=super_cell, num_configs=num_phonon_configs, sigmas=phonon_sigma, seed=random_seed)
+        potential = abtem.Potential(atoms=atoms, sampling=lateral_sampling, parametrization=potential_parametrization,
+            slice_thickness=vertical_sampling, projection=potential_projection)
+        potential_arr = xp.mean(potential.build().compute(progress_bar=False).array, axis=0)
+    else:
+        # print("Using Static potential")
+        potential = abtem.Potential(atoms=super_cell, sampling=lateral_sampling, parametrization=potential_parametrization,
+            slice_thickness=vertical_sampling, projection=potential_projection)
+        potential_arr = potential.build().compute(progress_bar=False).array
+    # print(f"potential.shape = {potential.shape}")
+    
+    # Cast potential_arr into numpy array
+    if device_abtem == 'gpu':
+        potential_arr = potential_arr.get()
+    
+    return potential_arr
+    
 def simulate_cbed(thickness, tilt_x, tilt_y, params_abTEM=None):
     
     if params_abTEM is None:

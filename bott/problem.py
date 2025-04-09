@@ -3,65 +3,70 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-r"""
-The FreeSolv function network test problem.
-"""
+import os
 
-from typing import List, Optional, Union
 import torch
 from botorch.test_functions.synthetic import SyntheticTestFunction
+from tifffile import imread, imwrite
+
+from bott.io import load_tif
+from bott.physics_models import simulate_cbed
+from bott.utils import make_output_filenm
+from bott.reduction import ReductionFunction
+from bott.loss import LossFunction
 
 
 class OptimizationProblem(SyntheticTestFunction):
-    """Problem Class for Hyperparameter Optimization."""
+    """ Problem Class for Hyperparameter Optimization. """
     
-    def __init__(self, partition_type: str='square', num_tiles: int=9, **kwargs) -> None:
-        """Initialize the function network.
-
-        Args:
-            partition_type: A str specifying type of partition to be used. 
-                Options:    'vert': partiioning vertically, 
-                            'square': partitioning as square grids, 
-                            'domain': partitioning using domain knowledge 
-            num_tiles: A int specifying number of tiles to be partitioned
-
-        Returns:
-            None
-        """        
-        # Load atoms and calculate dx
-        # self.current_directory = os.getcwd() # Get the working directory
-        # self.atoms = read('/Users/pbuathong/Desktop/BoTT_data/SrTiO3.cif')  #TODO change it
-        # self.dx = self.atoms.cell[2, 2]
-        # self.fpath = '/Users/pbuathong/bott/'
-        # self.trueopt = np.array([[310,5,-10]])
+    def __init__(self, ground_truth_path: str, output_path='/output', save_results=True, 
+                 reduction_params: dict={'reduction_type':'square', 'num_tiles':2},
+                 loss_params: dict={'loss_type': 'SSE'}, 
+                 noise_std = None, device='cuda', **kwargs) -> None:
+        self.device = device
+        self.save_results = save_results
+        self.output_path = output_path
+        super().__init__(noise_std=noise_std) # This has no effect unless specifically called as `get_objective(X, noisy_objective=True)`
         
         # Initialize these major components
-        self.physics_model = None
-        self.reduction_func = None # for optimization strategies don't need reduction (partition) we just pass None
-        self.loss_func = None
-        
-        # self.true_y = self.load(self.trueopt) #[simulate(x_val) for x_val in x_obs]
-        # self.partition_type = partition_type
-        # self.num_tiles = num_tiles
-        # if self.partition_type == 'domain' and self.num_tiles!=2:
-        #     print(f"Partition type: {self.partition_type} only supports num_tiles=2.")
-        #     print(f"Reassigning {self.num_tiles} to 2!")
-        #     self.num_tiles=2
+        self.measurement_true = torch.from_numpy(imread(ground_truth_path)).to(self.device)
+        self.physics_model = simulate_cbed
+        self.reduction_func = ReductionFunction(reduction_params) # for optimization strategies don't need reduction (partition) we just pass None
+        self.loss_func = LossFunction(loss_params)
 
-    def get_objective(self, X, noisy=False):
+    def get_measurement_true(self):
+        # Write it as a method so we can preprocess them in the future, like normalization, resampling and such
+        return self.measurement_true
+    
+    def get_objective(self, X, noisy_objective=False):
         """
         wrapper function to return objective
         """
-        # __call__(X) can be configured by BoTorch to add noise on the objective
-        # evaluate_true(X) is used to get objective directly from the physics mdel
+        # __call__(X) is implemented by BoTorch and it can do noising / transformation on self.evaluate_true(X)
+        # evaluate_true(X) is used to get objective directly from the physics model. This naming is BoTorch convention.
         
-        return self.__call__(X) if noisy else self.evaluate_true(X)
+        return self.__call__(X) if noisy_objective else self.evaluate_true(X)
 
     def evaluate_true(self, X):
         """
         Return the objective by combining loss, tiling, and physics model 
         """
-        if self.reduction_func is not None:
-            return self.loss_func(self.reduction_func(self.physics_model(X)))
+        
+        # Try to get measurement_simu from file, if not then simulate
+        file_path = os.path.join(self.output_path, make_output_filenm(X))
+        if os.path.exists(file_path):
+            measurement_simu = torch.from_numpy(load_tif(file_path)).to(self.device)
         else:
-            return self.loss_func(self.physics_model(X))
+            measurement_simu = self.physics_model(X)
+            if self.save_results:
+                os.makedirs(os.path.dirname(file_path), exist_ok=True)
+                imwrite(file_path, measurement_simu)
+            measurement_simu = torch.from_numpy(measurement_simu).to(self.device)
+                
+        measurement_true = self.get_measurement_true()
+                
+        # Get the loss value (objective) and return
+        if self.reduction_func is not None:
+            return self.loss_func(self.reduction_func(measurement_simu), self.reduction_func(measurement_true))
+        else:
+            return self.loss_func(measurement_simu, measurement_true)
