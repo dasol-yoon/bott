@@ -6,6 +6,7 @@
 import os
 
 import torch
+from torch import Tensor
 from botorch.test_functions.synthetic import SyntheticTestFunction
 from tifffile import imread, imwrite
 
@@ -19,17 +20,21 @@ from bott.loss import LossFunction
 class OptimizationProblem(SyntheticTestFunction):
     """ Problem Class for Hyperparameter Optimization. """
     
-    def __init__(self, ground_truth_path: str, output_path='/output', save_results=True, 
-                 reduction_params: dict={'reduction_type':'square', 'num_tiles':2},
+    def __init__(self, ground_truth: Tensor, output_path='./output', save_results=True, 
+                 reduction_params: dict={'reduction_type':'square', 'reduction_kwargs':{'num_tiles':2}},
                  loss_params: dict={'loss_type': 'SSE'}, 
-                 noise_std = None, device='cuda', **kwargs) -> None:
+                 dim = 3, bounds = [(5,300), (-20, 20), (-20, 20)],
+                 noise_std = None, device='cuda') -> None: # noise_std somehow has no effect when it's < 1, very weird
+        self.dim = dim
+        self._bounds = bounds
+        super(OptimizationProblem, self).__init__(noise_std=noise_std, negate=False, bounds=self._bounds) # This has no effect unless specifically called as `get_objective(X, noisy_objective=True)`
+        
         self.device = device
         self.save_results = save_results
         self.output_path = output_path
-        super().__init__(noise_std=noise_std) # This has no effect unless specifically called as `get_objective(X, noisy_objective=True)`
         
         # Initialize these major components
-        self.measurement_true = torch.from_numpy(imread(ground_truth_path)).to(self.device)
+        self.measurement_true = ground_truth.to(self.device)
         self.physics_model = simulate_cbed
         self.reduction_func = ReductionFunction(reduction_params) # for optimization strategies don't need reduction (partition) we just pass None
         self.loss_func = LossFunction(loss_params)
@@ -57,7 +62,7 @@ class OptimizationProblem(SyntheticTestFunction):
         if os.path.exists(file_path):
             measurement_simu = torch.from_numpy(load_tif(file_path)).to(self.device)
         else:
-            measurement_simu = self.physics_model(X)
+            measurement_simu = self.physics_model(*X)
             if self.save_results:
                 os.makedirs(os.path.dirname(file_path), exist_ok=True)
                 imwrite(file_path, measurement_simu)
