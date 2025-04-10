@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## 2025.04.10
+- Add `figure_full_abTEM_simulation_timing` and `figure_potential_generation_timing` notebooks
+- Initiate the notebook for GD and AD-based multislice development
+
 ## 2025.04.09
 - Refine `reduction` module. Generalize the vert/hori tiling into `get_long_tiles`. Rename `domainKnowledgeTile` into `circular_tiles` for clarity. Enable overlapping tiles by specifying "tile_width" and allowing padding the measurement. Enable different reduce methods including "mean", "sum", and "False/None" to return the original tiles for debugging purpose.
 - Modify `OptimizationProblem` so it can correctly initialized with the `super().__init__()`.

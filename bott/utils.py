@@ -138,3 +138,68 @@ def get_EM_constants(acceleration_voltage, output_type):
         return sigma
     else:
         KeyError(f"output_type '{output_type}' not implemented yet, please use 'gamma', 'wavelength', or 'sigma'!")
+        
+def print_system_info():
+    
+    import os
+    import platform
+    import sys
+    import numpy as np
+    import torch
+    
+    print("### System information ###")
+    
+    # Operating system information
+    print(f"Operating System: {platform.system()} {platform.release()}")
+    print(f"OS Version: {platform.version()}")
+    print(f"Machine: {platform.machine()}")
+    print(f"Processor: {platform.processor()}")
+    
+    # CPU cores
+    if 'SLURM_JOB_CPUS_PER_NODE' in os.environ:
+        cpus =  int(os.environ['SLURM_JOB_CPUS_PER_NODE'])
+    else:
+        # Fallback to the total number of CPU cores on the node
+        cpus = os.cpu_count()
+    print(f"Available CPU cores: {cpus}")
+    
+    # Memory information
+    if 'SLURM_MEM_PER_NODE' in os.environ:
+        # Memory allocated per node by SLURM (in MB)
+        mem_total = int(os.environ['SLURM_MEM_PER_NODE']) / 1024  # Convert MB to GB
+        print(f"SLURM-Allocated Total Memory: {mem_total:.2f} GB")
+    elif 'SLURM_MEM_PER_CPU' in os.environ:
+        # Memory allocated per CPU by SLURM (in MB)
+        mem_total = int(os.environ['SLURM_MEM_PER_CPU']) * cpus / 1024  # Convert MB to GB
+        print(f"SLURM-Allocated Total Memory: {mem_total:.2f} GB")
+    else:
+        try:
+            import psutil
+            # Fallback to system memory information
+            mem = psutil.virtual_memory()
+            print(f"Total Memory: {mem.total / (1024 ** 3):.2f} GB")
+            print(f"Available Memory: {mem.available / (1024 ** 3):.2f} GB")
+        except ImportError:
+            print("Memory information will be available after `conda install conda-forge::psutil`")
+    
+    # CUDA and GPU information
+    print(f"CUDA Available: {torch.cuda.is_available()}")
+    print(f"CUDA Version: {torch.version.cuda}")
+    print(f"GPU Device: {[torch.cuda.get_device_name(d) for d in [d for d in range(torch.cuda.device_count())]]}")
+    
+    # Python version and executable
+    print(f"Python Executable: {sys.executable}")
+    print(f"Python Version: {sys.version}")
+    print(f"NumPy Version: {np.__version__}")
+    print(f"PyTorch Version: {torch.__version__}")
+    try:
+        import abtem
+        print(f"abTEM Version: {abtem.__version__}")
+    except ImportError:
+        print("Didn't find abTEM")
+    try:
+        import cupy
+        print(f"Cupy Version: {cupy.__version__}")
+    except ImportError:
+        print("Didn't find Cupy")
+    print(" ")
