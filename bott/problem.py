@@ -6,15 +6,15 @@
 import os
 
 import torch
-from torch import Tensor
 from botorch.test_functions.synthetic import SyntheticTestFunction
 from tifffile import imread, imwrite
+from torch import Tensor
 
 from bott.io import load_tif
-from bott.physics_models import simulate_cbed
-from bott.utils import make_output_filenm
-from bott.reduction import ReductionFunction
 from bott.loss import LossFunction
+from bott.physics_models import simulate_cbed
+from bott.reduction import ReductionFunction
+from bott.utils import make_output_filenm
 
 
 class OptimizationProblem(SyntheticTestFunction):
@@ -37,7 +37,9 @@ class OptimizationProblem(SyntheticTestFunction):
         self.measurement_true = ground_truth.to(self.device)
         self.physics_model = simulate_cbed
         self.reduction_func = ReductionFunction(reduction_params) # for optimization strategies don't need reduction (partition) we just pass None
-        self.loss_func = LossFunction(loss_params)
+        self.loss_func = LossFunction(loss_params,y_true=ground_truth)
+        self.reduction_true = self.reduction_func(self.measurement_true)
+        self.num_tiles = reduction_params['reduction_kwargs']['num_tiles']
 
     def get_measurement_true(self):
         # Write it as a method so we can preprocess them in the future, like normalization, resampling and such
