@@ -2,6 +2,7 @@
 # We may turn this into a class if we have other physics models
 from bott.utils import get_default_abTEM_params
 
+
 def simulate_potential(thickness, params_abTEM=None):
     '''
     This one is for future gradient descent purpose
@@ -17,7 +18,8 @@ def simulate_potential(thickness, params_abTEM=None):
         params_abTEM = get_default_abTEM_params()
      
     # Unpack params_abTEM explictly
-    device_abtem = params_abTEM["device_abtem"]
+    # device_abtem = params_abTEM["device_abtem"]
+    device_abtem = 'cpu' #TODO change back to above
     path_crystal = params_abTEM["path_crystal"]
 
     potential_extent_x = params_abTEM["potential_extent_x"]
@@ -35,10 +37,10 @@ def simulate_potential(thickness, params_abTEM=None):
     # Note that the printing are commented out
     
     # Setup imports
-    import ase
     import abtem
-    import numpy as np
+    import ase
     import dask
+    import numpy as np
 
     if device_abtem == 'gpu':
         import cupy as xp
@@ -87,7 +89,8 @@ def simulate_cbed(thickness, tilt_x, tilt_y, params_abTEM=None):
         params_abTEM = get_default_abTEM_params()
      
     # Unpack params_abTEM explictly
-    device_abtem = params_abTEM["device_abtem"]
+    # device_abtem = params_abTEM["device_abtem"]
+    device_abtem = 'cpu' #TODO change back to above
     path_crystal = params_abTEM["path_crystal"]
 
     potential_extent_x = params_abTEM["potential_extent_x"]
@@ -116,10 +119,10 @@ def simulate_cbed(thickness, tilt_x, tilt_y, params_abTEM=None):
     # Note that the printing are commented out
     
     # Setup imports
-    import ase
     import abtem
-    import numpy as np
+    import ase
     import dask
+    import numpy as np
 
     if device_abtem == 'gpu':
         import cupy as xp
@@ -133,7 +136,8 @@ def simulate_cbed(thickness, tilt_x, tilt_y, params_abTEM=None):
     # abtem configure
     abtem.config.set({"local_diagnostics.progress_bar": False})
     abtem.config.set({"device": device_abtem})
-    
+    #TODO uncomment above
+
     # Setup cell
     unit_cell = ase.io.read(path_crystal)
     target_object_extent = np.array((potential_extent_x, potential_extent_y, thickness)) # Specimen range in Ang (x,y,z)
