@@ -82,7 +82,7 @@ def run_one_trial(
     SSE_value  = SSE(y_simu=image_output,y_true=problem.measurement_true,dp_pow=1).unsqueeze(-1)
 
     # calculate reduction intermediate outputs for EICF
-    if algo not in ['EI','KG','Random']:
+    if algo=='EICF':
         y_value = torch.zeros(torch.Size([X.shape[0]])+torch.Size([1+problem.reduction_true.shape[-1]]))
         for i in range(X.shape[0]):
             y_reduction = problem.reduction_func(image_output[i,...])
@@ -115,7 +115,7 @@ def run_one_trial(
         SSE_value  = torch.cat((SSE_value,SSE(y_simu=image_temp,y_true=problem.measurement_true,dp_pow=1).unsqueeze(0).unsqueeze(0)),dim=0)
 
         # calculate reduction intermediate outputs for EICF
-        if algo not in ['EI','KG','Random']:
+        if algo=='EICF':
             y_reduction = problem.reduction_func(image_temp)
             reduction_SSE = SSE(y_simu=y_reduction,y_true=problem.reduction_true,dp_pow=1)
             epsilon = torch.Tensor([SSE_value[-1]-reduction_SSE])
