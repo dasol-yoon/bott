@@ -1,22 +1,25 @@
 import torch
+
+
 class LossFunction(torch.nn.Module):
 
-    def __init__(self, loss_params, device='cuda'):
+    def __init__(self, loss_params, y_true, device='cuda'):
         super(LossFunction, self).__init__()
         self.device = device
         self.loss_params = loss_params
+        self.y_true = y_true
         
-    def forward(self, y_simu, y_true):
+    def forward(self, y_simu):
         loss_params = self.loss_params
         loss_type   = loss_params['loss_type']
         dp_pow      = loss_params.get('dp_pow', 1)
         
         if loss_type == 'SSE':
-            loss = SSE(y_simu, y_true, dp_pow)
+            loss = SSE(y_simu, self.y_true, dp_pow)
         elif loss_type == 'MSE':
-            loss = MSE(y_simu, y_true, dp_pow)
+            loss = MSE(y_simu, self.y_true, dp_pow)
         elif loss_type == 'NRMSE':
-            loss = NRMSE(y_simu, y_true, dp_pow)
+            loss = NRMSE(y_simu, self.y_true, dp_pow)
         else:
             raise ValueError(f"The current implementation does not support tiling type {loss_type}")
         
@@ -41,7 +44,7 @@ I'm still unsure what would be the appropriate shape for our loss yet
 def SSE(y_simu, y_true, dp_pow):
     y_simu = safe_power(y_simu, dp_pow)
     y_true = safe_power(y_true, dp_pow)
-    return (y_simu-y_true).pow(2).sum()
+    return (y_simu-y_true).pow(2).sum(dim=-1).sum(dim=-1)
 
 def MSE(y_simu, y_true, dp_pow):
     y_simu = safe_power(y_simu, dp_pow)
