@@ -67,23 +67,25 @@ def run_one_trial(
     random.seed(trial)
 
     # random initial points and calculate intermediate outputs [cbed]
-    X=draw_sobol_samples(bounds=torch.Tensor(problem.bounds),n=n_init_evals,q=1).squeeze(-2) 
-    inter_output_shape = torch.Size([X.shape[0]])+problem.measurement_true.shape
-    inter_output = torch.zeros(inter_output_shape)
+    X=draw_sobol_samples(bounds=torch.Tensor(problem.bounds),n=n_init_evals,q=1).squeeze(-2)
+
+    # Physical images output 
+    image_shape = torch.Size([X.shape[0]])+problem.measurement_true.shape
+    image_output = torch.zeros(image_shape)
     for i in range(X.shape[0]):
-        inter_temp = torch.Tensor(problem.physics_model(X[i][0].detach().cpu().numpy(),X[i][1].detach().cpu().numpy(),X[i][2].detach().cpu().numpy())) # numpy
-        inter_output[i,...]=inter_temp # calculate intermediate output
+        image_temp = torch.Tensor(problem.physics_model(X[i][0].detach().cpu().numpy(),X[i][1].detach().cpu().numpy(),X[i][2].detach().cpu().numpy())) # numpy
+        image_output[i,...]=image_temp # calculate intermediate output
     if noisy:
-        inter_output = inter_output + torch.normal(0,1,size=inter_output.shape)
+        image_output = image_output + torch.normal(0,1,size=image_output.shape)
     
     # calculate final objective (SSE)
-    SSE_value  = SSE(y_simu=inter_output,y_true=problem.measurement_true,dp_pow=1).unsqueeze(-1)
+    SSE_value  = SSE(y_simu=image_output,y_true=problem.measurement_true,dp_pow=1).unsqueeze(-1)
 
     # calculate reduction intermediate outputs for EICF
     if algo not in ['EI','KG','Random']:
         y_value = torch.zeros(torch.Size([X.shape[0]])+torch.Size([1+problem.reduction_true.shape[-1]]))
         for i in range(X.shape[0]):
-            y_reduction = problem.reduction_func(inter_output[i,...])
+            y_reduction = problem.reduction_func(image_output[i,...])
             reduction_SSE = SSE(y_simu=y_reduction,y_true=problem.reduction_true,dp_pow=1)
             epsilon = torch.Tensor([SSE_value[i]-reduction_SSE])
             y_temp = torch.cat((y_reduction,epsilon),dim=-1)
@@ -95,11 +97,11 @@ def run_one_trial(
     acqf_runtime = []
     for iter in range(max_iter):
         if algo in ['EI','KG','Random']:
-            model = FixedNoiseGP(train_X=X,train_Y=SSE_value,train_Yvar=torch.ones_like(SSE_value) * 0.0001,
-                                outcome_transform=Standardize(m=SSE_value.shape[-1]),input_transform=Normalize(d=X.shape[-1]))
+            train_Y = SSE_value
         else:
-            model = FixedNoiseGP(train_X=X, train_Y=y_value, train_Yvar=torch.ones_like(y_value) * 0.0001,
-                            outcome_transform=Standardize(m=y_value.shape[-1]),input_transform=Normalize(d=X.shape[-1]))# GP is on y, not the objective
+            train_Y = y_value
+        model = FixedNoiseGP(train_X=X, train_Y=train_Y, train_Yvar=torch.ones_like(train_Y) * 0.0001,
+                        outcome_transform=Standardize(m=train_Y.shape[-1]),input_transform=Normalize(d=X.shape[-1]))# GP is on y, not the objective
         fit_gpytorch_mll(ExactMarginalLogLikelihood(model.likelihood, model))
         start_time = time.time()
         new_x, acqf_val = get_new_sample(model=model,algo=algo,problem=problem,best_val=best_val,objective=objective)
@@ -107,14 +109,14 @@ def run_one_trial(
         acqf_vals = acqf_vals+[acqf_val]
         acqf_runtime = acqf_runtime + [running_time]
         X = torch.cat((X,new_x),dim=0)
-        inter_temp=torch.Tensor(problem.physics_model(new_x[0][0].detach().cpu().numpy(),new_x[0][1].detach().cpu().numpy(),new_x[0][2].detach().cpu().numpy()))
-        inter_output = torch.cat((inter_output,inter_temp.unsqueeze(0)),dim=0)
+        image_temp=torch.Tensor(problem.physics_model(new_x[0][0].detach().cpu().numpy(),new_x[0][1].detach().cpu().numpy(),new_x[0][2].detach().cpu().numpy()))
+        image_output = torch.cat((image_output,image_temp.unsqueeze(0)),dim=0)
         # calculate final objective (SSE)
-        SSE_value  = torch.cat((SSE_value,SSE(y_simu=inter_temp,y_true=problem.measurement_true,dp_pow=1).unsqueeze(0).unsqueeze(0)),dim=0)
+        SSE_value  = torch.cat((SSE_value,SSE(y_simu=image_temp,y_true=problem.measurement_true,dp_pow=1).unsqueeze(0).unsqueeze(0)),dim=0)
 
         # calculate reduction intermediate outputs for EICF
         if algo not in ['EI','KG','Random']:
-            y_reduction = problem.reduction_func(inter_temp)
+            y_reduction = problem.reduction_func(image_temp)
             reduction_SSE = SSE(y_simu=y_reduction,y_true=problem.reduction_true,dp_pow=1)
             epsilon = torch.Tensor([SSE_value[-1]-reduction_SSE])
             y_temp = torch.cat((y_reduction,epsilon),dim=-1).unsqueeze(0)
@@ -135,7 +137,7 @@ def run_one_trial(
             "acqf_val_list": acqf_vals,
             "best_obs_vals": best_vals,
             "train_X": X,
-            "train_Y": inter_output,
+            "train_Y": train_Y,
             "obj_func_val": obj,
             "random_states": {
                 "torch": torch.get_rng_state(),
@@ -176,15 +178,3 @@ def get_new_sample(model,algo, problem,best_val,objective):
             + problem.bounds[0]
         )
         return new_x, None
-
-
-
-
-
-
-'''
-What should problem class have?
-- attributes: input dimension, output dimension
-- functions: that outputs intermediate outputs, there is no need for a wrap up objective
-                it should also have for loop if multiple inputs are supplied.
-'''
