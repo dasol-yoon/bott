@@ -24,20 +24,22 @@ class OptimizationProblem(SyntheticTestFunction):
                  reduction_params: dict={'reduction_type':'square', 'reduction_kwargs':{'num_tiles':2}},
                  loss_params: dict={'loss_type': 'SSE'}, 
                  dim = 3, bounds = [(5,300), (-20, 20), (-20, 20)],
-                 noise_std = None, device='cuda') -> None: # noise_std somehow has no effect when it's < 1, very weird
+                 noise_std = None, dtype=torch.float64, device='cuda') -> None: # noise_std somehow has no effect when it's < 1, very weird
+        self.dtype = dtype
+        self.device = device
+        
         self.dim = dim
         self._bounds = bounds
         super(OptimizationProblem, self).__init__(noise_std=noise_std, negate=False, bounds=self._bounds) # This has no effect unless specifically called as `get_objective(X, noisy_objective=True)`
         
-        self.device = device
         self.save_results = save_results
         self.output_path = output_path
         
         # Initialize these major components
-        self.measurement_true = ground_truth.to(self.device)
+        self.measurement_true = ground_truth.to(dtype=self.dtype, device=self.device)
         self.physics_model = simulate_cbed
         self.reduction_func = ReductionFunction(reduction_params) # for optimization strategies don't need reduction (partition) we just pass None
-        self.loss_func = LossFunction(loss_params,y_true=ground_truth)
+        self.loss_func = LossFunction(loss_params)
         self.reduction_true = self.reduction_func(self.measurement_true)
         self.num_tiles = reduction_params['reduction_kwargs']['num_tiles']
 
@@ -62,13 +64,14 @@ class OptimizationProblem(SyntheticTestFunction):
         # Try to get measurement_simu from file, if not then simulate
         file_path = os.path.join(self.output_path, make_output_filenm(X))
         if os.path.exists(file_path):
-            measurement_simu = torch.from_numpy(load_tif(file_path)).to(self.device)
+            measurement_simu = torch.from_numpy(load_tif(file_path)).to(dtype=self.dtype, device=self.device)
         else:
-            measurement_simu = self.physics_model(*X)
+            device = 'gpu' if self.device == 'cuda' else None
+            measurement_simu = self.physics_model(*X, device_abtem=device)
             if self.save_results:
                 os.makedirs(os.path.dirname(file_path), exist_ok=True)
                 imwrite(file_path, measurement_simu)
-            measurement_simu = torch.from_numpy(measurement_simu).to(self.device)
+            measurement_simu = torch.from_numpy(measurement_simu).to(dtype=self.dtype, device=self.device)
                 
         measurement_true = self.get_measurement_true()
                 

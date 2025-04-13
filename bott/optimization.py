@@ -7,25 +7,20 @@ from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
-from botorch.acquisition import ExpectedImprovement
+from botorch.acquisition import LogExpectedImprovement # See https://arxiv.org/abs/2310.20708 for details.
 from botorch.acquisition.monte_carlo import qExpectedImprovement
 from botorch.acquisition.objective import GenericMCObjective, MCAcquisitionObjective
 from botorch.fit import fit_gpytorch_mll
-from botorch.models.gp_regression import FixedNoiseGP, SingleTaskGP
+from botorch.models.gp_regression import SingleTaskGP
 from botorch.models.transforms import Standardize
 from botorch.models.transforms.input import Normalize
 from botorch.optim import optimize_acqf
-from botorch.sampling.normal import IIDNormalSampler  # import package
 from botorch.sampling.normal import SobolQMCNormalSampler
 from botorch.test_functions import SyntheticTestFunction
 from botorch.utils.sampling import draw_sobol_samples
 from gpytorch.mlls import ExactMarginalLogLikelihood
 
 from bott.loss import MSE, NRMSE, SSE
-
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-dtype = torch.double
-print(device)
 
 def run_one_trial(
         problem_name: str,
@@ -54,12 +49,15 @@ def run_one_trial(
         None.
     '''
 
+    # Setup
+    dtype = problem.dtype
+    device = problem.device
     current_directory = os.getcwd()
     results_dir = f"{current_directory}/results/{problem_name}/{algo}/"
     os.makedirs(results_dir, exist_ok=True)
 
     if objective is None:
-        objective = GenericMCObjective(lambda Y: ((Y[...,:-1]-problem.reduction_true).pow(2)+Y[...,[-1]]).sum(dim=-1))
+        objective = GenericMCObjective(lambda Y: ((Y[...,:-1]-problem.reduction_true).pow(2)+Y[...,[-1]]).sum(dim=-1)) # TODO come back to this, doesn't seem right
 
     # set random seed
     torch.manual_seed(trial)
@@ -67,69 +65,83 @@ def run_one_trial(
     random.seed(trial)
 
     # random initial points and calculate intermediate outputs [cbed]
-    X=draw_sobol_samples(bounds=torch.Tensor(problem.bounds),n=n_init_evals,q=1).squeeze(-2)
+    X=draw_sobol_samples(bounds=problem.bounds,n=n_init_evals,q=1).squeeze(-2) # X = [n_init, problem.dim], note that X is by default on cpu because problem.bounds is also on cpu
 
     # Physical images output 
-    image_shape = torch.Size([X.shape[0]])+problem.measurement_true.shape
-    image_output = torch.zeros(image_shape)
-    for i in range(X.shape[0]):
-        image_temp = torch.Tensor(problem.physics_model(X[i][0].detach().cpu().numpy(),X[i][1].detach().cpu().numpy(),X[i][2].detach().cpu().numpy())) # numpy
-        image_output[i,...]=image_temp # calculate intermediate output
+    input_params = X.tolist()
+    outputs_np = np.array([problem.physics_model(*param) for param in input_params])
+    image_output = torch.tensor(outputs_np, dtype=dtype, device=device)
     if noisy:
         image_output = image_output + torch.normal(0,1,size=image_output.shape)
     
-    # calculate final objective (SSE)
-    SSE_value  = SSE(y_simu=image_output,y_true=problem.measurement_true,dp_pow=1).unsqueeze(-1)
+    # calculate final objective (SSE), this is pixelSSE. Might consider rename SSE_value into pixel_losses, and make reduction_SSE into group_loss.
+    SSE_value  = SSE(y_simu=image_output, y_true=problem.measurement_true, dp_pow=1, reduce=False).unsqueeze(-1) # SSE_value = [n_init, 1]
 
-    # calculate reduction intermediate outputs for EICF
+    # calculate reduction intermediate outputs for EICF in batch
     if algo=='EICF':
-        y_value = torch.zeros(torch.Size([X.shape[0]])+torch.Size([1+problem.reduction_true.shape[-1]]))
-        for i in range(X.shape[0]):
-            y_reduction = problem.reduction_func(image_output[i,...])
-            reduction_SSE = SSE(y_simu=y_reduction,y_true=problem.reduction_true,dp_pow=1)
-            epsilon = torch.Tensor([SSE_value[i]-reduction_SSE])
-            y_temp = torch.cat((y_reduction,epsilon),dim=-1)
-            y_value[i,...]=y_temp
-    obj = -1*SSE_value
-    best_vals = [obj.max().detach().item()]
-    best_val = obj.max()
+        y_reduction = problem.reduction_func(image_output)  # [n_init, num_tiles]
+        reduction_SSE = SSE(y_simu=y_reduction, y_true=problem.reduction_true, dp_pow=1, reduce=False).unsqueeze(-1) # [n_init, 1]
+        epsilon = SSE_value - reduction_SSE
+        y_value = torch.cat((y_reduction,epsilon),dim=-1) # [n_init, num_tiles+1]
+            
+    obj = -1*SSE_value # maximization direction
+    best_vals = [obj.max().item()] # list of values
+    best_val = obj.max() # tensor
     acqf_vals = []
     acqf_runtime = []
+    
+    # Start the optimization loop
     for iter in range(max_iter):
+        
+        # Choose the acquisition function algorithm
         if algo in ['EI','KG','Random']:
             train_Y = SSE_value
         else:
             train_Y = y_value
-        model = FixedNoiseGP(train_X=X, train_Y=train_Y, train_Yvar=torch.ones_like(train_Y) * 0.0001,
+        
+        # Get model    
+        model = SingleTaskGP(train_X=X, train_Y=train_Y, train_Yvar=torch.ones_like(train_Y) * 0.0001, # #TODO Need to configure this variance scaling hyperparameter
                         outcome_transform=Standardize(m=train_Y.shape[-1]),input_transform=Normalize(d=X.shape[-1]))# GP is on y, not the objective
         fit_gpytorch_mll(ExactMarginalLogLikelihood(model.likelihood, model))
+        
+        # Get new sample with timing
         start_time = time.time()
         new_x, acqf_val = get_new_sample(model=model,algo=algo,problem=problem,best_val=best_val,objective=objective)
         running_time = time.time()-start_time
-        acqf_vals = acqf_vals+[acqf_val]
-        acqf_runtime = acqf_runtime + [running_time]
-        X = torch.cat((X,new_x),dim=0)
-        image_temp=torch.Tensor(problem.physics_model(new_x[0][0].detach().cpu().numpy(),new_x[0][1].detach().cpu().numpy(),new_x[0][2].detach().cpu().numpy()))
-        image_output = torch.cat((image_output,image_temp.unsqueeze(0)),dim=0)
+        
+        # Append and concat new values       
+        acqf_vals.append(acqf_val)
+        acqf_runtime.append(running_time)
+        X = torch.cat((X, new_x),dim=0)
+        
+        # Run physical model with a new_x
+        input_param = new_x.tolist()[0] # [value0, value1, value2]
+        image_temp = torch.from_numpy(problem.physics_model(*input_param)).to(dtype=dtype, device=device)
+        # image_output = torch.cat((image_output, image_temp.unsqueeze(0)),dim=0) # This will continue to concat new images but image_output is never used. We should remove this unless it's needed somewhere else.
+        
         # calculate final objective (SSE)
-        SSE_value  = torch.cat((SSE_value,SSE(y_simu=image_temp,y_true=problem.measurement_true,dp_pow=1).unsqueeze(0).unsqueeze(0)),dim=0)
+        new_SSE = SSE(y_simu=image_temp,y_true=problem.measurement_true,dp_pow=1).unsqueeze(0).unsqueeze(0) # [1,1]
+        SSE_value = torch.cat((SSE_value, new_SSE), dim=0)
 
         # calculate reduction intermediate outputs for EICF
         if algo=='EICF':
-            y_reduction = problem.reduction_func(image_temp)
-            reduction_SSE = SSE(y_simu=y_reduction,y_true=problem.reduction_true,dp_pow=1)
-            epsilon = torch.Tensor([SSE_value[-1]-reduction_SSE])
-            y_temp = torch.cat((y_reduction,epsilon),dim=-1).unsqueeze(0)
-            y_value=torch.cat((y_value,y_temp),dim=0)
+            y_reduction = problem.reduction_func(image_temp) # [num_tiles,]
+            reduction_SSE = SSE(y_simu=y_reduction,y_true=problem.reduction_true,dp_pow=1).unsqueeze(0) # [1,]
+            epsilon = SSE_value[-1] - reduction_SSE
+            y_temp = torch.cat((y_reduction,epsilon),dim=-1).unsqueeze(0) # [1,num_tiles+1]
+            y_value = torch.cat((y_value,y_temp),dim=0)
+        
+        # Display and save results
         obj = -1*SSE_value
-        best_vals = best_vals+[obj.max().detach().item()]
+        best_vals.append(obj.max().item())
         best_val = obj.max()
+        
         print(f"Iteration: {iter+1}/{max_iter}")
         print(f"Suggested point: {new_x}")
         print(f"new SSE value: {SSE_value[-1]}")
         if algo not in ['EI','KG','Random']:
             print(f"Reduction valued: {y_temp}")
-        print(f"Best objective function found: {-1*best_val}")
+        print(f"Best objective function value found: {-1*best_val}")
         print(f"==========================================================")
         BO_results = {
             "max_iter": max_iter,
@@ -158,11 +170,12 @@ def get_new_sample(model,algo, problem,best_val,objective):
         - a tuple consisting of a tensor of the new suggested input to evaluate or batch of inputs and the corresponding acquisition value
     '''
     if algo == 'EI':
-        acqf = ExpectedImprovement(model=model,best_f=best_val)
+        acqf = LogExpectedImprovement(model=model,best_f=best_val)
         new_x, acqf_val = optimize_acqf(acq_function=acqf,bounds=problem.bounds,q=1,num_restarts=20,raw_samples=100)        
         return new_x, acqf_val
+    
     elif algo == 'EICF':
-        sampler = SobolQMCNormalSampler(1024)
+        sampler = SobolQMCNormalSampler(torch.Size([1024]))
         EICF = qExpectedImprovement(model=model, best_f=best_val, objective=objective,sampler=sampler)
         new_x, acqf_val = optimize_acqf(
             acq_function=EICF,
@@ -172,9 +185,12 @@ def get_new_sample(model,algo, problem,best_val,objective):
             raw_samples=100,
         )
         return new_x, acqf_val
+    
     elif algo == 'Random':
         new_x = (
             torch.rand([1, problem.dim]) * (problem.bounds[1] - problem.bounds[0])
             + problem.bounds[0]
         )
         return new_x, None
+    else:
+        raise ValueError(f"The current implementation does not support algo = '{algo}', please use either 'EI, 'EICF', or 'Random'")

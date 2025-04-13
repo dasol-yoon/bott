@@ -5,6 +5,10 @@ All notable changes to this project will be documented in this file.
 ## 2025.04.12
 - @PB hook up the `optimization.py` and `runner.ipynb`
 - Pull `abtem_device` out of `params_abtem` dict so we can specify it outside, default currently set as "cpu". Also rename the `abTEM` into `abtem` for simplicity.
+- Add `reduce` option to loss functions so we can optionally keep the first (batch) dimension
+- Specify `dtype` and `device` for `problem.py` so we can easily switch between CPU/GPU and data type.
+- Modify `reduction.py` so all tiling functions are supporting (B,H,W) 3D input tensors. (B,H,W) -> (B, mxn, H/m, W/n)
+- Polish `optimization.py` to make consistent tensor construction with device/dtype, use batch processing, improve comments
 
 ## 2025.04.10
 - Add `figure_full_abTEM_simulation_timing` and `figure_potential_generation_timing` notebooks

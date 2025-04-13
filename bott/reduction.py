@@ -28,7 +28,7 @@ def get_long_tiles(
     measurement: torch.Tensor,
     num_tiles: int = 9,
     tile_width: int = None,
-    dim: int = 0,
+    dim: int = -1,
     reduce = 'mean',
     pad_value: float = 0.0,
 ) -> torch.Tensor:
@@ -37,10 +37,10 @@ def get_long_tiles(
     Optionally apply reduction (mean) to each tile. Pad the measurement at the end if needed.
 
     Args:
-        measurement: Input tensor of any shape.
+        measurement: Input tensor of [batch, H, W] or [H, W].
         num_tiles: Number of tiles to generate. If None, calculated from tile_width.
         tile_width: Width of each tile along the given dimension. If None, calculated from num_tiles.
-        dim: Dimension along which to split (e.g., 1 = width, 0 = height).
+        dim: Dimension along which to split (e.g., -1 = width, -2 = height).
         reduce: If True, return mean of each tile. If False, return full tiles.
         pad_value: Value to pad the measurement if needed.
 
@@ -73,12 +73,12 @@ def get_long_tiles(
         slicer[dim] = slice(start, end)
         tile = measurement[tuple(slicer)]
         tiles.append(tile)
-    tiles = torch.stack(tiles, dim=0).to(dtype=measurement.dtype, device=measurement.device)
+    tiles = torch.stack(tiles, dim=-3).to(dtype=measurement.dtype, device=measurement.device)
     
     if reduce == 'mean':
-        return tiles.mean(dim=tuple(range(1, tiles.ndim)))
+        return tiles.mean(dim=(-2,-1))
     elif reduce == 'sum':
-        return tiles.sum(dim=tuple(range(1, tiles.ndim)))
+        return tiles.sum(dim=(-2,-1))
     elif reduce in (False, None):
         return tiles
     else:
@@ -94,7 +94,7 @@ def get_circular_tiles(
     Returns the mean values of these two regions as a tensor.
 
     Args:
-        measurement: Input tensor of any shape (at least 2D).
+        measurement: Input tensor of [batch, H, W] or [H, W].
         radius: Radius of the circular mask as a fraction of the minimum dimension.
 
     Returns:
@@ -134,13 +134,13 @@ def get_circular_tiles(
     tiles = torch.stack([
         torch.stack(img_center),
         torch.stack(img_periphery)
-    ], dim=-1)
+    ], dim=-3) # tiles = [batch, tiles, H, W]
     
     # Note that the last dimension is the center/periphery dimension
     if reduce == 'mean':
-        return tiles.sum(dim=tuple(range(1, tiles.ndim-1))) / tiles.count_nonzero(dim=tuple(range(1, tiles.ndim-1)))
+        return tiles.sum(dim=(-2,-1)) / tiles.count_nonzero(dim=(-2,-1))
     elif reduce == 'sum':
-        return tiles.sum(dim=tuple(range(1, tiles.ndim-1)))
+        return tiles.sum(dim=(-2,-1))
     elif reduce in (False, None):
         return tiles
     else:
@@ -158,7 +158,7 @@ def get_square_tiles(
     Optionally apply reduction (mean) to each tile. Pad the measurement at the end if needed.
 
     Args:
-        measurement: Input tensor of any shape (at least 2D).
+        measurement: Input tensor of [batch, H, W] or [H, W].
         num_tiles: Number of tiles in each dimension (creating num_tiles x num_tiles grid).
         tile_width: Width of each tile. If None, calculated from num_tiles.
         reduce: If True, return mean of each tile. If False, return full tiles.
@@ -216,12 +216,12 @@ def get_square_tiles(
             tiles.append(tile)
     
     # Stack tiles along a new first dimension
-    tiles = torch.stack(tiles, dim=0).to(dtype=measurement.dtype, device=measurement.device)
+    tiles = torch.stack(tiles, dim=-3).to(dtype=measurement.dtype, device=measurement.device) # [batch, tile_n, reduce_H, reduce_W]
     
     if reduce == 'mean':
-        return tiles.mean(dim=tuple(range(1, tiles.ndim)))
+        return tiles.mean(dim=(-2,-1))
     elif reduce == 'sum':
-        return tiles.sum(dim=tuple(range(1, tiles.ndim)))
+        return tiles.sum(dim=(-2,-1))
     elif reduce in (False, None):
         return tiles
     else:
