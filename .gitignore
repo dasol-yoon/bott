@@ -1,3 +1,4 @@
 # Directories that don't need to backup
 __pycache__/
 output/
+results/
