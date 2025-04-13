@@ -1,9 +1,9 @@
 # Put the forward methods (like f(tilt, thickness) = PACBED)
 # We may turn this into a class if we have other physics models
-from bott.utils import get_default_abTEM_params
+from bott.utils import get_default_abtem_params
 
 
-def simulate_potential(thickness, params_abTEM=None):
+def simulate_potential(thickness, params_abtem=None, device_abtem='cpu'):
     '''
     This one is for future gradient descent purpose
     The potential will be returned, and we'll generate the measurement based on some in-house multislice simulation code with tilted propagator
@@ -14,25 +14,23 @@ def simulate_potential(thickness, params_abTEM=None):
     For fair comparison, we might want to fix a thickness and just do tilt optimization.
     '''
     
-    if params_abTEM is None:
-        params_abTEM = get_default_abTEM_params()
+    if params_abtem is None:
+        params_abtem = get_default_abtem_params()
      
-    # Unpack params_abTEM explictly
-    # device_abtem = params_abTEM["device_abtem"]
-    device_abtem = 'cpu' #TODO change back to above
-    path_crystal = params_abTEM["path_crystal"]
+    # Unpack params_abtem explictly
+    path_crystal = params_abtem["path_crystal"]
 
-    potential_extent_x = params_abTEM["potential_extent_x"]
-    potential_extent_y = params_abTEM["potential_extent_y"]
-    lateral_sampling = params_abTEM["lateral_sampling"]
-    vertical_sampling = params_abTEM["vertical_sampling"]
-    potential_parametrization = params_abTEM["potential_parametrization"]
-    potential_projection = params_abTEM["potential_projection"]
+    potential_extent_x = params_abtem["potential_extent_x"]
+    potential_extent_y = params_abtem["potential_extent_y"]
+    lateral_sampling = params_abtem["lateral_sampling"]
+    vertical_sampling = params_abtem["vertical_sampling"]
+    potential_parametrization = params_abtem["potential_parametrization"]
+    potential_projection = params_abtem["potential_projection"]
     
-    random_seed = params_abTEM["random_seed"]
-    use_frozen_phonon = params_abTEM["use_frozen_phonon"]
-    num_phonon_configs = params_abTEM["num_phonon_configs"]
-    phonon_sigma = params_abTEM["phonon_sigma"]
+    random_seed = params_abtem["random_seed"]
+    use_frozen_phonon = params_abtem["use_frozen_phonon"]
+    num_phonon_configs = params_abtem["num_phonon_configs"]
+    phonon_sigma = params_abtem["phonon_sigma"]
     
     # Note that the printing are commented out
     
@@ -83,35 +81,33 @@ def simulate_potential(thickness, params_abTEM=None):
     
     return potential_arr
     
-def simulate_cbed(thickness, tilt_x, tilt_y, params_abTEM=None):
+def simulate_cbed(thickness, tilt_x, tilt_y, params_abtem=None, device_abtem='cpu'):
     
-    if params_abTEM is None:
-        params_abTEM = get_default_abTEM_params()
+    if params_abtem is None:
+        params_abtem = get_default_abtem_params()
      
-    # Unpack params_abTEM explictly
-    # device_abtem = params_abTEM["device_abtem"]
-    device_abtem = 'cpu' #TODO change back to above
-    path_crystal = params_abTEM["path_crystal"]
+    # Unpack params_abtem explictly
+    path_crystal = params_abtem["path_crystal"]
 
-    potential_extent_x = params_abTEM["potential_extent_x"]
-    potential_extent_y = params_abTEM["potential_extent_y"]
-    lateral_sampling = params_abTEM["lateral_sampling"]
-    vertical_sampling = params_abTEM["vertical_sampling"]
-    potential_parametrization = params_abTEM["potential_parametrization"]
-    potential_projection = params_abTEM["potential_projection"]
+    potential_extent_x = params_abtem["potential_extent_x"]
+    potential_extent_y = params_abtem["potential_extent_y"]
+    lateral_sampling = params_abtem["lateral_sampling"]
+    vertical_sampling = params_abtem["vertical_sampling"]
+    potential_parametrization = params_abtem["potential_parametrization"]
+    potential_projection = params_abtem["potential_projection"]
 
-    random_seed = params_abTEM["random_seed"]
-    use_frozen_phonon = params_abTEM["use_frozen_phonon"]
-    num_phonon_configs = params_abTEM["num_phonon_configs"]
-    phonon_sigma = params_abTEM["phonon_sigma"]
+    random_seed = params_abtem["random_seed"]
+    use_frozen_phonon = params_abtem["use_frozen_phonon"]
+    num_phonon_configs = params_abtem["num_phonon_configs"]
+    phonon_sigma = params_abtem["phonon_sigma"]
 
-    energy = params_abTEM["energy"]
-    convergence_angle = params_abTEM["convergence_angle"]
-    df = params_abTEM["df"]
-    aberrations = params_abTEM["aberrations"]
+    energy = params_abtem["energy"]
+    convergence_angle = params_abtem["convergence_angle"]
+    df = params_abtem["df"]
+    aberrations = params_abtem["aberrations"]
 
-    scan_step_size = params_abTEM["scan_step_size"]
-    return_pacbed = params_abTEM["return_pacbed"]
+    scan_step_size = params_abtem["scan_step_size"]
+    return_pacbed = params_abtem["return_pacbed"]
     
     
     ########################################################################################################################
@@ -136,7 +132,6 @@ def simulate_cbed(thickness, tilt_x, tilt_y, params_abTEM=None):
     # abtem configure
     abtem.config.set({"local_diagnostics.progress_bar": False})
     abtem.config.set({"device": device_abtem})
-    #TODO uncomment above
 
     # Setup cell
     unit_cell = ase.io.read(path_crystal)

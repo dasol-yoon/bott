@@ -61,10 +61,8 @@ def normalize_arr(arr, norm_type='zero_to_one'):
     
     return norm_arr
 
-def get_default_abTEM_params():
-    params_abTEM = {  
-        # Device configuration
-        "device_abtem": "gpu",
+def get_default_abtem_params():
+    params_abtem = {  
 
         # Crystal structure input
         "path_crystal": "./data/SrTiO3.cif",
@@ -98,7 +96,7 @@ def get_default_abTEM_params():
         "return_pacbed": True,
     }
    
-    return params_abTEM
+    return params_abtem
 
 def potential_to_phase(projected_atomic_potential, acceleration_voltage):
     
