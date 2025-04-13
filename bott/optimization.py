@@ -8,10 +8,11 @@ from typing import Dict, List, Optional, Tuple, Union
 import numpy as np
 import torch
 from botorch.acquisition import LogExpectedImprovement # See https://arxiv.org/abs/2310.20708 for details.
-from botorch.acquisition.monte_carlo import qExpectedImprovement
+# from botorch.acquisition.monte_carlo import qExpectedImprovement
+from botorch.acquisition.logei import qLogExpectedImprovement # See https://arxiv.org/abs/2310.20708 for details.
 from botorch.acquisition.objective import GenericMCObjective, MCAcquisitionObjective
 from botorch.fit import fit_gpytorch_mll
-from botorch.models.gp_regression import SingleTaskGP
+from botorch.models.gp_regression import SingleTaskGP # No FixedNoiseGP in botorch 0.13.0
 from botorch.models.transforms import Standardize
 from botorch.models.transforms.input import Normalize
 from botorch.optim import optimize_acqf
@@ -57,7 +58,7 @@ def run_one_trial(
     os.makedirs(results_dir, exist_ok=True)
 
     if objective is None:
-        objective = GenericMCObjective(lambda Y: ((Y[...,:-1]-problem.reduction_true).pow(2)+Y[...,[-1]]).sum(dim=-1)) # TODO come back to this, doesn't seem right
+        objective = GenericMCObjective(lambda Y, X=None: ((Y[...,:-1]-problem.reduction_true).pow(2)+Y[...,[-1]]).sum(dim=-1))
 
     # set random seed
     torch.manual_seed(trial)
@@ -65,7 +66,7 @@ def run_one_trial(
     random.seed(trial)
 
     # random initial points and calculate intermediate outputs [cbed]
-    X=draw_sobol_samples(bounds=problem.bounds,n=n_init_evals,q=1).squeeze(-2) # X = [n_init, problem.dim], note that X is by default on cpu because problem.bounds is also on cpu
+    X=draw_sobol_samples(bounds=problem.bounds.to(device=device),n=n_init_evals,q=1).squeeze(-2) # X = [n_init, problem.dim], note that X is by default on cpu because problem.bounds is also on cpu
 
     # Physical images output 
     input_params = X.tolist()
@@ -101,7 +102,7 @@ def run_one_trial(
         
         # Get model    
         model = SingleTaskGP(train_X=X, train_Y=train_Y, train_Yvar=torch.ones_like(train_Y) * 0.0001, # #TODO Need to configure this variance scaling hyperparameter
-                        outcome_transform=Standardize(m=train_Y.shape[-1]),input_transform=Normalize(d=X.shape[-1]))# GP is on y, not the objective
+                        outcome_transform=Standardize(m=train_Y.shape[-1]),input_transform=Normalize(d=X.shape[-1])).to(device) # GP is on y, not the objective
         fit_gpytorch_mll(ExactMarginalLogLikelihood(model.likelihood, model))
         
         # Get new sample with timing
@@ -169,17 +170,22 @@ def get_new_sample(model,algo, problem,best_val,objective):
     Returns:
         - a tuple consisting of a tensor of the new suggested input to evaluate or batch of inputs and the corresponding acquisition value
     '''
+    
+    # Setup
+    dtype = problem.dtype
+    device = problem.device
+    
     if algo == 'EI':
         acqf = LogExpectedImprovement(model=model,best_f=best_val)
-        new_x, acqf_val = optimize_acqf(acq_function=acqf,bounds=problem.bounds,q=1,num_restarts=20,raw_samples=100)        
+        new_x, acqf_val = optimize_acqf(acq_function=acqf,bounds=problem.bounds.to(device=device),q=1,num_restarts=20,raw_samples=100)        
         return new_x, acqf_val
     
     elif algo == 'EICF':
-        sampler = SobolQMCNormalSampler(torch.Size([1024]))
-        EICF = qExpectedImprovement(model=model, best_f=best_val, objective=objective,sampler=sampler)
+        sampler = SobolQMCNormalSampler(torch.Size([1024])).to(device=device)
+        EICF = qLogExpectedImprovement(model=model, best_f=best_val, objective=objective,sampler=sampler).to(device=device)
         new_x, acqf_val = optimize_acqf(
             acq_function=EICF,
-            bounds=problem.bounds,
+            bounds=problem.bounds.to(device=device),
             q=1,
             num_restarts=50,
             raw_samples=100,
