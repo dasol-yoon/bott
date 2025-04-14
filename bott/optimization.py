@@ -30,6 +30,7 @@ from botorch.utils.sampling import draw_sobol_samples
 from gpytorch.mlls import ExactMarginalLogLikelihood
 
 from bott.loss import MSE, NRMSE, SSE
+from bott.ts_acqf import ThompsonSampling
 
 
 def run_one_trial(
@@ -104,7 +105,7 @@ def run_one_trial(
     for iter in range(max_iter):
         
         # Choose the acquisition function algorithm
-        if algo in ['EI','KG','Random']:
+        if algo in ['EI','KG','Random','TS']:
             train_Y = SSE_value
         else:
             train_Y = y_value
@@ -149,7 +150,7 @@ def run_one_trial(
         print(f"Iteration: {iter+1}/{max_iter}")
         print(f"Suggested point: {new_x}")
         print(f"new SSE value: {SSE_value[-1]}")
-        if algo not in ['EI','KG','Random']:
+        if algo not in ['EI','KG','Random','TS']:
             print(f"Reduction valued: {y_temp}")
         print(f"Best objective function value found: {-1*best_val}")
         print(f"==========================================================")
@@ -203,7 +204,17 @@ def get_new_sample(model,algo, problem,best_val,objective):
             raw_samples=100,
         )
         return new_x, acqf_val
-    
+    elif algo =='TS':
+        acq_function = ThompsonSampling(model=model)
+        new_x, acqf_val = optimize_acqf(
+            acq_function=acq_function,
+            bounds=problem.bounds.to(device=device),
+            q=1,
+            num_restarts=20,
+            raw_samples=100,
+            options={"batch_limit": 1},
+        )
+        return new_x, acqf_val 
     elif algo == 'Random':
         new_x = (
             torch.rand([1, problem.dim]) * (problem.bounds[1] - problem.bounds[0])
