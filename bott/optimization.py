@@ -7,12 +7,20 @@ from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
-from botorch.acquisition import LogExpectedImprovement # See https://arxiv.org/abs/2310.20708 for details.
+from botorch.acquisition import (
+    LogExpectedImprovement,  # See https://arxiv.org/abs/2310.20708 for details.
+)
+from botorch.acquisition import qKnowledgeGradient
+
 # from botorch.acquisition.monte_carlo import qExpectedImprovement
-from botorch.acquisition.logei import qLogExpectedImprovement # See https://arxiv.org/abs/2310.20708 for details.
+from botorch.acquisition.logei import (
+    qLogExpectedImprovement,  # See https://arxiv.org/abs/2310.20708 for details.
+)
 from botorch.acquisition.objective import GenericMCObjective, MCAcquisitionObjective
 from botorch.fit import fit_gpytorch_mll
-from botorch.models.gp_regression import SingleTaskGP # No FixedNoiseGP in botorch 0.13.0
+from botorch.models.gp_regression import (
+    SingleTaskGP,  # No FixedNoiseGP in botorch 0.13.0
+)
 from botorch.models.transforms import Standardize
 from botorch.models.transforms.input import Normalize
 from botorch.optim import optimize_acqf
@@ -22,6 +30,7 @@ from botorch.utils.sampling import draw_sobol_samples
 from gpytorch.mlls import ExactMarginalLogLikelihood
 
 from bott.loss import MSE, NRMSE, SSE
+
 
 def run_one_trial(
         problem_name: str,
@@ -179,7 +188,10 @@ def get_new_sample(model,algo, problem,best_val,objective):
         acqf = LogExpectedImprovement(model=model,best_f=best_val)
         new_x, acqf_val = optimize_acqf(acq_function=acqf,bounds=problem.bounds.to(device=device),q=1,num_restarts=20,raw_samples=100)        
         return new_x, acqf_val
-    
+    elif algo == 'KG':  
+        acqf = qKnowledgeGradient(model, num_fantasies=128)
+        new_x, acqf_val = optimize_acqf(acq_function=acqf,bounds=problem.bounds.to(device=device),q=1,num_restarts=10,raw_samples=512)
+        return new_x, acqf_val 
     elif algo == 'EICF':
         sampler = SobolQMCNormalSampler(torch.Size([1024])).to(device=device)
         EICF = qLogExpectedImprovement(model=model, best_f=best_val, objective=objective,sampler=sampler).to(device=device)
