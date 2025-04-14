@@ -1,0 +1,14 @@
+name: bott
+channels:
+  - conda-forge
+dependencies:
+  - abtem
+  - botorch=0.13
+  - cupy
+  - gpytorch
+  - matplotlib
+  - python=3.11
+  - pytorch-cuda=12.1
+  - pytorch=2.1.0
+  - tifffile
+  - ipykernel

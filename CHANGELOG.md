@@ -5,6 +5,7 @@ All notable changes to this project will be documented in this file.
 ## 2025.04.13
 - Fix the "EICF" algo by allowing objective lamda to take `X=None` becuase it's strictly needed for botorch 0.13.0
 - Worked through the `device` for major components but seems like BO runs slower on GPU with botorch (see `runner.ipynb`)
+- Add `environment.yml`; Update `README.md` for installation instruction.
 
 ## 2025.04.12
 - @PB hook up the `optimization.py` and `runner.ipynb`
