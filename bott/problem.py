@@ -20,13 +20,20 @@ from bott.utils import make_output_filenm
 class OptimizationProblem(SyntheticTestFunction):
     """ Problem Class for Hyperparameter Optimization. """
     
-    def __init__(self, ground_truth: Tensor, output_path='./output', save_results=True, 
+    def __init__(self, ground_truth: Tensor, 
+                 output_path='./output', 
+                 save_results=True, 
                  reduction_params: dict={'reduction_type':'square', 'reduction_kwargs':{'num_tiles':2}},
                  loss_params: dict={'loss_type': 'SSE'}, 
-                 dim = 3, bounds = [(5,300), (-20, 20), (-20, 20)],
-                 noise_std = None, dtype=torch.float64, device='cuda') -> None: # noise_std somehow has no effect when it's < 1, very weird
+                 norm_arr = False,
+                 dim = 3, 
+                 bounds = [(5,300), (-20, 20), (-20, 20)],
+                 noise_std = None,
+                 dtype = torch.float64, 
+                 device='cuda') -> None: # noise_std somehow has no effect when it's < 1, very weird
         self.dtype = dtype
         self.device = device
+        self.norm_arr = norm_arr
         
         self.dim = dim
         self._bounds = bounds
@@ -47,7 +54,10 @@ class OptimizationProblem(SyntheticTestFunction):
 
     def get_measurement_true(self):
         # Write it as a method so we can preprocess them in the future, like normalization, resampling and such
-        return self.ground_truth / self.ground_truth.max()
+        if self.norm_arr:
+            return self.ground_truth / self.ground_truth.max()
+        else:
+            return self.ground_truth
     
     def get_reduction_true(self):
         return self.reduction_func(self.get_measurement_true())
@@ -56,7 +66,10 @@ class OptimizationProblem(SyntheticTestFunction):
         device_simu = self.device if device is None else device
         device_simu = 'gpu' if device_simu == 'cuda' else 'cpu'
         simulation = self.physics_model(*params, device_simu=device_simu)
-        return simulation / simulation.max()
+        if self.norm_arr:
+            return simulation / simulation.max()
+        else:
+            return simulation
     
     def get_objective(self, X, noisy_objective=False):
         """

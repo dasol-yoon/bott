@@ -43,8 +43,8 @@ def run_one_trial(
         metrics: List[str]=['obs_val'],
         objective: Optional[MCAcquisitionObjective] = None,
         noisy: Optional[bool]=False,
-        device_botorch: str='cpu',
-        dtype: torch.dtype = torch.double
+        dtype: torch.dtype = torch.double,
+        device_botorch: str='cpu'
 )-> None:
     '''Run one trial of BO loop for the given problem (tile pattern) and algorithm
 

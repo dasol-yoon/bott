@@ -2,6 +2,9 @@
 
 All notable changes to this project will be documented in this file.
 
+##2025.04.16
+- Add `norm_arr` option to `OptimizationProblem` so we can disble the max normalization. Feel like we should first figure out whether the total intensity of PACBED changes significantly with thickness in simulation.
+
 ## 2025.04.15
 - Clean up temporary notebooks
 - Add support of Apple Silicon (MPS) GPU to `print_system_info`
