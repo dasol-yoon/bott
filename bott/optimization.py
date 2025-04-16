@@ -74,9 +74,13 @@ def run_one_trial(
     print(f"problem.device : {problem.device}")
     print(f"GP model device: {device_botorch}")
     
+    loss_func = problem.loss_func
+    reduction_true = problem.reduction_true.to(device)
+    measurement_true = problem.measurement_true.to(device)
     
     if objective is None:
-        objective = GenericMCObjective(lambda Y, X=None: ((Y[...,:-1]-problem.reduction_true.to(device)).pow(2)+Y[...,[-1]]).sum(dim=-1))
+        # objective = GenericMCObjective(lambda Y, X=None: ((Y[...,:-1]-problem.reduction_true.to(device)).pow(2)+Y[...,[-1]]).sum(dim=-1)) #TODO: The sum dimension is still a bit unclear
+        objective = GenericMCObjective(lambda Y, X=None: (loss_func(Y[...,:-1], reduction_true) + Y[...,[-1]]).sum(dim=-1))
 
     # set random seed
     torch.manual_seed(trial)
@@ -93,17 +97,17 @@ def run_one_trial(
     if noisy:
         image_output = image_output + torch.normal(0,1,size=image_output.shape)
     
-    # calculate final objective (SSE), this is pixelSSE. Might consider rename SSE_value into pixel_losses, and make reduction_SSE into group_loss.
-    SSE_value  = SSE(y_simu=image_output, y_true=problem.measurement_true.to(device), dp_pow=1, reduce=False).unsqueeze(-1) # SSE_value = [n_init, 1]
+    # calculate final objective (Loss), this is pixelSSE. Might consider rename SSE_value into pixel_losses, and make reduction_SSE into group_loss.
+    pixelLoss  = loss_func(y_simu=image_output, y_true=measurement_true, reduce=False).unsqueeze(-1) # pixelLoss = [n_init, 1]
 
     # calculate reduction intermediate outputs for EICF in batch
     if algo=='EICF':
         y_reduction = problem.reduction_func(image_output).to(device)  # [n_init, num_tiles]
-        reduction_SSE = SSE(y_simu=y_reduction, y_true=problem.reduction_true.to(device), dp_pow=1, reduce=False).unsqueeze(-1) # [n_init, 1]
-        epsilon = SSE_value - reduction_SSE
+        reductionLoss = loss_func(y_simu=y_reduction, y_true=reduction_true, reduce=False).unsqueeze(-1) # [n_init, 1]
+        epsilon = pixelLoss - reductionLoss
         y_value = torch.cat((y_reduction,epsilon),dim=-1) # [n_init, num_tiles+1]
             
-    obj = -1*SSE_value # maximization direction
+    obj = -1*pixelLoss # maximization direction
     best_vals = [obj.max().item()] # list of values
     best_val = obj.max() # tensor
     acqf_vals = []
@@ -119,7 +123,7 @@ def run_one_trial(
         
         # Choose the acquisition function algorithm
         if algo in ['EI','KG','Random','TS']:
-            train_Y = SSE_value
+            train_Y = pixelLoss
         else:
             train_Y = y_value
         
@@ -147,22 +151,25 @@ def run_one_trial(
         time_simu_end = time_sync()
         # image_output = torch.cat((image_output, image_temp.unsqueeze(0)),dim=0) # This will continue to concat new images but image_output is never used. We should remove this unless it's needed somewhere else.
         
-        # calculate final objective (SSE)
-        new_SSE = SSE(y_simu=image_temp,y_true=problem.measurement_true.to(device),dp_pow=1).unsqueeze(0).unsqueeze(0) # [1,1]
-        SSE_value = torch.cat((SSE_value, new_SSE), dim=0)
+        # calculate final objective (Loss)
+        new_Loss = loss_func(y_simu=image_temp,y_true=measurement_true).unsqueeze(0).unsqueeze(0) # [1,1]
+        pixelLoss = torch.cat((pixelLoss, new_Loss), dim=0)
 
         # calculate reduction intermediate outputs for EICF
         if algo=='EICF':
             y_reduction = problem.reduction_func(image_temp).to(device) # [num_tiles,]
-            reduction_SSE = SSE(y_simu=y_reduction,y_true=problem.reduction_true.to(device),dp_pow=1).unsqueeze(0) # [1,]
-            epsilon = SSE_value[-1] - reduction_SSE
+            reductionLoss = loss_func(y_simu=y_reduction,y_true=reduction_true).unsqueeze(0) # [1,]
+            epsilon = pixelLoss[-1] - reductionLoss
             y_temp = torch.cat((y_reduction,epsilon),dim=-1).unsqueeze(0) # [1,num_tiles+1]
             y_value = torch.cat((y_value,y_temp),dim=0)
         
         # Display and save results
-        obj = -1*SSE_value
+        # TODO: Need to double check these values and printing, felt like the optimizaiton direciton is off
+        obj = -1*pixelLoss
         best_vals.append(obj.max().item())
         best_val = obj.max()
+        print(f"pixelLoss = {pixelLoss}")
+        print(f"best_vals = {best_vals}")
         
         time_iter_end = time_sync()
         
@@ -172,7 +179,7 @@ def run_one_trial(
         print(f"Physics simulation time: {time_simu_end - time_simu_start:.3f} sec")
         print(f"Iteration time: {time_iter_end - time_iter_start:.3f} sec")
         print(f"Suggested point: {new_x}")
-        print(f"new SSE value: {SSE_value[-1]}")
+        print(f"new Loss value: {pixelLoss[-1]}")
         if algo not in ['EI','KG','Random','TS']:
             print(f"Reduction valued: {y_temp}")
         print(f"Best objective function value found: {-1*best_val}")

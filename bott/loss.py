@@ -8,17 +8,17 @@ class LossFunction(torch.nn.Module):
         self.device = device
         self.loss_params = loss_params
         
-    def forward(self, y_simu, y_true, reduce=True):
+    def forward(self, y_simu, y_true, dp_pow=None, reduce=True):
         loss_params = self.loss_params
         loss_type   = loss_params['loss_type']
-        dp_pow      = loss_params.get('dp_pow', 1)
+        pow      = loss_params.get('dp_pow', 1) if dp_pow is None else dp_pow
         
         if loss_type == 'SSE':
-            loss = SSE(y_simu, y_true, dp_pow, reduce=reduce)
+            loss = SSE(y_simu, y_true, pow, reduce=reduce)
         elif loss_type == 'MSE':
-            loss = MSE(y_simu, y_true, dp_pow, reduce=reduce)
+            loss = MSE(y_simu, y_true, pow, reduce=reduce)
         elif loss_type == 'NRMSE':
-            loss = NRMSE(y_simu, y_true, dp_pow, reduce=reduce)
+            loss = NRMSE(y_simu, y_true, pow, reduce=reduce)
         else:
             raise ValueError(f"The current implementation does not support lossing type {loss_type}")
         
