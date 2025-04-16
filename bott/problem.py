@@ -3,82 +3,80 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-r"""
-Problem Class for Bayesian Optimization
-"""
-from typing import List, Optional, Union
+import os
 
-import matplotlib.pyplot as plt
-import numpy as np
 import torch
-from abtem import *
-from ase.io import read
 from botorch.test_functions.synthetic import SyntheticTestFunction
-from PIL import Image
+from tifffile import imread, imwrite
 from torch import Tensor
 
-from bott.forward_models import fwd_model1
-from bott.loss import *
-from bott.metrics import *
+from bott.io import load_tif
+from bott.loss import LossFunction
+from bott.physics_models import simulate_cbed
+from bott.reduction import ReductionFunction
+from bott.utils import make_output_filenm
 
 
-class ElectronMicroscopyCalibration(SyntheticTestFunction):
-    """Electron Microscopy Calibration Problem Class for Bayesian Optimization."""
+class OptimizationProblem(SyntheticTestFunction):
+    """ Problem Class for Hyperparameter Optimization. """
     
-    def __init__(self, true_opt: Tensor, fwd_model_type: str='default', partition_type: str='square', num_tiles: int=9, loss:str='SSE', **kwargs) -> None:
-        """Initialize the function network.
-
-        Args:
-            fwd_model_type: A str indicating the model class
-                Options:
-                            'default': default model
-            partition_type: A str specifying type of partition to be used. 
-                Options:    'vert': partiioning vertically, 
-                            'square': partitioning as square grids, 
-                            'domain': partitioning using domain knowledge 
-            num_tiles: A int specifying number of tiles to be partitioned
-            true_opt: A tensor containing the true parameter
-
-        Returns:
-            None
-        """      
-        self.fwd_model_type = fwd_model_type  
-        self.num_tiles = num_tiles
-        self.partition_type = partition_type
-        self.loss = loss
-        self.true_opt  = true_opt
-        # Load forward model
-        if self.fwd_model_type == 'default':
-            self.fwd_model = fwd_model1()
+    def __init__(self, ground_truth: Tensor, output_path='./output', save_results=True, 
+                 reduction_params: dict={'reduction_type':'square', 'reduction_kwargs':{'num_tiles':2}},
+                 loss_params: dict={'loss_type': 'SSE'}, 
+                 dim = 3, bounds = [(5,300), (-20, 20), (-20, 20)],
+                 noise_std = None, dtype=torch.float64, device='cuda') -> None: # noise_std somehow has no effect when it's < 1, very weird
+        self.dtype = dtype
+        self.device = device
         
-        # Load tiling function
-        if self.partition_type == 'vert':
-            self.tiling = VertTile(num_tiles=self.num_tiles)
-        elif self.partition_type == 'domain':
-            if self.num_tiles !=2:
-                raise ValueError(f"Domain Knowledge Tiling only supports num_tile = 2, but got {self.num_tiles}")
-            self.tiling = domainKnowledgeTile(num_tiles=self.num_tiles) 
-        elif self.partition_type == 'square':
-            self.tiling = squareTile(num_tiles=self.num_tiles)
-        else:
-            raise ValueError(f"The current implementation does not support tiling type {self.partition_type}")
-        if self.loss == 'SSE':
-            self.loss_cal = tileSSE
-        self.tile_evaluate = self.tiling.evaluate_tile
-        self.y_true = self.fwd_model.load(x=np.array(self.true_opt))
+        self.dim = dim
+        self._bounds = bounds
+        super(OptimizationProblem, self).__init__(noise_std=noise_std, negate=False, bounds=self._bounds) # This has no effect unless specifically called as `get_objective(X, noisy_objective=True)`
+        
+        self.save_results = save_results
+        self.output_path = output_path
+        
+        # Initialize these major components
+        self.measurement_true = ground_truth.to(dtype=self.dtype, device=self.device)
+        self.physics_model = simulate_cbed
+        self.reduction_func = ReductionFunction(reduction_params) # for optimization strategies don't need reduction (partition) we just pass None
+        self.loss_func = LossFunction(loss_params)
+        self.reduction_true = self.reduction_func(self.measurement_true)
+        self.num_tiles = reduction_params['reduction_kwargs']['num_tiles']
 
-    def evaluate_true(self, X: Tensor) -> None:
-        return None
+    def get_measurement_true(self):
+        # Write it as a method so we can preprocess them in the future, like normalization, resampling and such
+        return self.measurement_true
     
-    def evaluate(self,X: Tensor):
-        output = torch.zeros(X.shape[0],1).to(torch.double)
-        print(f"outputshape {output.shape}")
-        for i in range(X.shape[0]):
-            x_array=np.array(X[[i],...])
-            y_sim = self.fwd_model.load(x=x_array)
-            print(f"shape y_sim {y_sim.shape}")
-            tile_x = self.tile_evaluate(y_sim)
-            print(f"tile_x shape {tile_x.shape}")
-            print(f"y_true shape {self.y_true}")
-            output[i,0]=self.loss_cal(tiles1=tile_x,tiles2=self.y_true)
-        return output
+    def get_objective(self, X, noisy_objective=False):
+        """
+        wrapper function to return objective
+        """
+        # __call__(X) is implemented by BoTorch and it can do noising / transformation on self.evaluate_true(X)
+        # evaluate_true(X) is used to get objective directly from the physics model. This naming is BoTorch convention.
+        
+        return self.__call__(X) if noisy_objective else self.evaluate_true(X)
+
+    def evaluate_true(self, X):
+        """
+        Return the objective by combining loss, tiling, and physics model 
+        """
+        
+        # Try to get measurement_simu from file, if not then simulate
+        file_path = os.path.join(self.output_path, make_output_filenm(X))
+        if os.path.exists(file_path):
+            measurement_simu = torch.from_numpy(load_tif(file_path)).to(dtype=self.dtype, device=self.device)
+        else:
+            device = 'gpu' if self.device == 'cuda' else None
+            measurement_simu = self.physics_model(*X, device_abtem=device)
+            if self.save_results:
+                os.makedirs(os.path.dirname(file_path), exist_ok=True)
+                imwrite(file_path, measurement_simu)
+            measurement_simu = torch.from_numpy(measurement_simu).to(dtype=self.dtype, device=self.device)
+                
+        measurement_true = self.get_measurement_true()
+                
+        # Get the loss value (objective) and return
+        if self.reduction_func is not None:
+            return self.loss_func(self.reduction_func(measurement_simu), self.reduction_func(measurement_true))
+        else:
+            return self.loss_func(measurement_simu, measurement_true)

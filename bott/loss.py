@@ -1,70 +1,76 @@
-## Put the loss functions and reduction methods
-import numpy as np
 import torch
-from torch import Tensor
 
-tkwargs = {"dtype":torch.double}
 
-def tileSSE(tiles1, tiles2): #SSE of patches (candidate vs. reference)
-    #todo: need error handling for the case when the two tensors have different shapes
-    return (tiles1-tiles2).pow(2).sum().unsqueeze(-1)
-# OLD Code
-# ## Put the loss functions and reduction methods
-# import torch
-# import numpy as np
+class LossFunction(torch.nn.Module):
 
-# tkwargs = {"dtype":torch.double}
-
-# # Reduction methods
-# def twoVertTiles(y_raw):
-#     arr = torch.Tensor([])
-#     arr = torch.cat((arr, torch.mean(y_raw[:,:75]).unsqueeze(-1) *1e1), dim=-1)
-#     arr = torch.cat((arr, torch.mean(y_raw[:,75:]).unsqueeze(-1) *1e1), dim=-1)
-#     return arr
-
-# def domainKnowledgeTile(y_raw):
-#     #create a mask to divide the image into central and peripheral regions
-#     ind = y_raw.shape[0]
-#     mask = np.zeros((ind,ind)).astype(bool)
-#     mask[70:-70,70:-70] = True #central region of the image #todo systematic way: CHT?
+    def __init__(self, loss_params, device='cuda'):
+        super(LossFunction, self).__init__()
+        self.device = device
+        self.loss_params = loss_params
+        
+    def forward(self, y_simu, y_true, reduce=True):
+        loss_params = self.loss_params
+        loss_type   = loss_params['loss_type']
+        dp_pow      = loss_params.get('dp_pow', 1)
+        
+        if loss_type == 'SSE':
+            loss = SSE(y_simu, y_true, dp_pow, reduce=reduce)
+        elif loss_type == 'MSE':
+            loss = MSE(y_simu, y_true, dp_pow, reduce=reduce)
+        elif loss_type == 'NRMSE':
+            loss = NRMSE(y_simu, y_true, dp_pow, reduce=reduce)
+        else:
+            raise ValueError(f"The current implementation does not support lossing type {loss_type}")
+        
+        return loss
     
-#     arr = torch.Tensor([])
-#     arr = torch.cat((arr, torch.mean(y_raw[mask]).unsqueeze(-1) *1e1), dim=-1)
-#     arr = torch.cat((arr, torch.mean(y_raw[~mask]).unsqueeze(-1) *1e1), dim=-1)
-#     return arr
+'''
+If we need some special design of loss (like concatenate different losses), it might be better to define that loss type directly, or to append the loss into a list
+'''
+        # Forward 
+        # def computeY(y_cand_raw,y_ref_raw, method, **kwargs):
+        #     y_cand_tiles = method(y_cand_raw,**kwargs)
+        #     y_ref_tiles = method(y_ref_raw,**kwargs)
+        #     tileTerm = tileSSE(y_cand_tiles,y_ref_tiles)
+        #     pixelTerm = pixelSSE(y_cand_raw, y_ref_raw)
+        #     return torch.cat((y_cand_tiles,pixelTerm-tileTerm),dim=-1).unsqueeze(0).to(**tkwargs) #y_pred
 
-# #TODO: use thinner one for test case
-# #PB changed to tensor
-# #TODO: Currently hard coded for the patch size. Need to modify later
-# def squareTiles(y_raw, **kwargs):
-#     numTiles= kwargs.get('numTiles',1) #default numTiles value
-#     arr = torch.Tensor([])
-#     pixPerTile = y_raw.shape[0]//numTiles
-#     for i in range(numTiles):
-#         for j in range(numTiles):
-#             tile = torch.mean(y_raw[...,pixPerTile*i:pixPerTile*(i+1),...,pixPerTile*j:pixPerTile*(j+1)]).unsqueeze(-1)
-#             arr = torch.cat((arr,tile*1e1),dim=-1)
-#     return arr
+'''
+I'm still unsure what would be the appropriate shape for our loss yet
+'''
 
-# def pixelSSE(y_cand_full, y_target_full):
-#     err = y_cand_full-y_target_full
-#     return err.pow(2).sum().unsqueeze(-1) #np.power(err,2).sum().unsqueeze(-1) 
+# Loss functions
+def SSE(y_simu, y_true, dp_pow, reduce=True):
+    # reduce decides whether we reduce the batch dimension
+    y_simu = safe_power(y_simu, dp_pow)
+    y_true = safe_power(y_true, dp_pow)
+    if reduce:
+        reduce_dims = tuple(range(y_simu.ndim))
+    else: 
+        reduce_dims = tuple(range(1, y_simu.ndim))
+    return (y_simu-y_true).pow(2).sum(dim=reduce_dims)
 
-# def tileSSE(tiles1, tiles2): #SSE of patches (candidate vs. reference)
-#     #todo: need error handling for the case when the two tensors have different shapes
-#     return (tiles1-tiles2).pow(2).sum().unsqueeze(-1)
+def MSE(y_simu, y_true, dp_pow, reduce=True):
+    y_simu = safe_power(y_simu, dp_pow)
+    y_true = safe_power(y_true, dp_pow)
+    if reduce:
+        reduce_dims = tuple(range(y_simu.ndim))
+    else: 
+        reduce_dims = tuple(range(1, y_simu.ndim))
+    return (y_simu-y_true).pow(2).mean(dim=reduce_dims)
 
-# # Loss functions
-# def NRMSE(y_pred, y_true):
-#     pass
+def NRMSE(y_simu, y_true, dp_pow, reduce=True):
+    y_simu = safe_power(y_simu, dp_pow)
+    y_true = safe_power(y_true, dp_pow)
+    data_mean = y_true.mean()
+    if reduce:
+        reduce_dims = tuple(range(y_simu.ndim))
+    else: 
+        reduce_dims = tuple(range(1, y_simu.ndim))
+    return (y_simu-y_true).pow(2).mean(dim=reduce_dims).sqrt() / data_mean
 
-# def SSE():
-#     pass
-
-# # Forward 
-# def computeY(y_cand_raw,y_ref_raw, method, **kwargs):
-#     y_cand_tiles = method(y_cand_raw,**kwargs)
-#     y_ref_tiles = method(y_ref_raw,**kwargs)
-#     tileTerm = tileSSE(y_cand_tiles,y_ref_tiles)
-#     pixelTerm = pixelSSE(y_cand_raw, y_ref_raw)
-#     return torch.cat((y_cand_tiles,pixelTerm-tileTerm),dim=-1).unsqueeze(0).to(**tkwargs) #y_pred
+def safe_power(arr, power, eps=1e-6):
+    '''
+    Raise the power of measurement in a numerically safe way
+    '''
+    return (arr+eps).pow(power)
