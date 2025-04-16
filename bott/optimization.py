@@ -2,7 +2,6 @@
 
 import os
 import random
-import time
 from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
@@ -31,6 +30,7 @@ from gpytorch.mlls import ExactMarginalLogLikelihood
 
 from bott.loss import MSE, NRMSE, SSE
 from bott.ts_acqf import ThompsonSampling
+from bott.utils import time_sync
 
 
 def run_one_trial(
@@ -62,12 +62,17 @@ def run_one_trial(
         None.
     '''
 
+    time_init_start = time_sync()
+    
     # Setup
     device = torch.device(device_botorch)
     current_directory = os.getcwd()
     results_dir = f"{current_directory}/results/{problem_name}/{algo}/"
     os.makedirs(results_dir, exist_ok=True)
-
+    print(f"problem.device : {problem.device}")
+    print(f"GP model device: {device_botorch}")
+    
+    
     if objective is None:
         objective = GenericMCObjective(lambda Y, X=None: ((Y[...,:-1]-problem.reduction_true.to(device)).pow(2)+Y[...,[-1]]).sum(dim=-1))
 
@@ -102,8 +107,13 @@ def run_one_trial(
     acqf_vals = []
     acqf_runtime = []
     
+    time_init_end = time_sync()
+    print(f"Initializing model with '{n_init_evals}' initial evaluations took {time_init_end - time_init_start:.3f} sec")
+    
     # Start the optimization loop
     for iter in range(max_iter):
+        
+        time_iter_start = time_sync()
         
         # Choose the acquisition function algorithm
         if algo in ['EI','KG','Random','TS']:
@@ -111,24 +121,28 @@ def run_one_trial(
         else:
             train_Y = y_value
         
-        # Get model    
+        # Get model #TODO Do we really need to create model with every iteration?
+        time_model_start = time_sync()
         model = SingleTaskGP(train_X=X, train_Y=train_Y, train_Yvar=torch.ones_like(train_Y) * 0.0001, # #TODO Need to configure this variance scaling hyperparameter
                         outcome_transform=Standardize(m=train_Y.shape[-1]),input_transform=Normalize(d=X.shape[-1])).to(device) # GP is on y, not the objective
         fit_gpytorch_mll(ExactMarginalLogLikelihood(model.likelihood, model))
+        time_model_end = time_sync()
         
         # Get new sample with timing
-        start_time = time.time()
+        time_sample_start = time_sync()
         new_x, acqf_val = get_new_sample(model=model,algo=algo,problem=problem,best_val=best_val,objective=objective, device=device, dtype=dtype)
-        running_time = time.time()-start_time
+        time_sample_end = time_sync()
         
         # Append and concat new values       
         acqf_vals.append(acqf_val)
-        acqf_runtime.append(running_time)
+        acqf_runtime.append(time_sample_end - time_sample_start)
         X = torch.cat((X, new_x),dim=0)
         
         # Run physical model with a new_x
         input_param = new_x.tolist()[0] # [value0, value1, value2]
+        time_simu_start = time_sync()
         image_temp = torch.from_numpy(problem.physics_model(*input_param)).to(dtype=dtype, device=device)
+        time_simu_end = time_sync()
         # image_output = torch.cat((image_output, image_temp.unsqueeze(0)),dim=0) # This will continue to concat new images but image_output is never used. We should remove this unless it's needed somewhere else.
         
         # calculate final objective (SSE)
@@ -148,7 +162,13 @@ def run_one_trial(
         best_vals.append(obj.max().item())
         best_val = obj.max()
         
-        print(f"Iteration: {iter+1}/{max_iter}")
+        time_iter_end = time_sync()
+        
+        print(f"\nIteration: {iter+1}/{max_iter}")
+        print(f"GP model fitting time: {time_model_end - time_model_start:.3f} sec")
+        print(f"Acqu func sampling time: {time_sample_end - time_sample_start:.3f} sec")
+        print(f"Physics simulation time: {time_simu_end - time_simu_start:.3f} sec")
+        print(f"Iteration time: {time_iter_end - time_iter_start:.3f} sec")
         print(f"Suggested point: {new_x}")
         print(f"new SSE value: {SSE_value[-1]}")
         if algo not in ['EI','KG','Random','TS']:
@@ -170,6 +190,7 @@ def run_one_trial(
             },
         }
         torch.save(BO_results, results_dir + f"trial_{trial}.pt")
+    print(f"\nTotal run time with '{max_iter}' iters: {time_sync() - time_init_start:.3f} sec")
 
 def get_new_sample(model,algo, problem,best_val,objective, device='cpu', dtype=torch.double):
     '''Produce a new sample or batch to evaluate the objective function

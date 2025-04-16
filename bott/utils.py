@@ -1,6 +1,7 @@
 # utils are for helper functions that don't fit elsewhere
 import numpy as np
 import torch
+from time import perf_counter
 
 def create_circular_mask(
     height: int,
@@ -209,3 +210,19 @@ def print_system_info():
     except ImportError:
         print("Didn't find Cupy")
     print(" ")
+    
+def time_sync():
+    # PyTorch doesn't have a direct exposed API to check the selected default device 
+    # so we'll be checking these .is_available() just to prevent error.
+    # Luckily these checks won't really affect the performance.
+    
+    # Check if CUDA is available
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()
+    # Check if MPS (Metal Performance Shaders) is available (macOS only)
+    elif torch.backends.mps.is_available():
+        torch.mps.synchronize()
+    
+    # Measure the time
+    t = perf_counter()
+    return t

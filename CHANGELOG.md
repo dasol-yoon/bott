@@ -4,6 +4,9 @@ All notable changes to this project will be documented in this file.
 
 ## 2025.04.15
 - Clean up temporary notebooks
+- Add support of Apple Silicon (MPS) GPU to `print_system_info`
+- Add individual device, dtype assignment for botorch and physics simulation
+- Add explicit timing for each major part including GP model fitting, acquisition function sampling, and physics simulation
 
 ## 2025.04.13
 - Fix the "EICF" algo by allowing objective lamda to take `X=None` becuase it's strictly needed for botorch 0.13.0
