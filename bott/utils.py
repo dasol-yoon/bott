@@ -180,10 +180,18 @@ def print_system_info():
         except ImportError:
             print("Memory information will be available after `conda install conda-forge::psutil`")
     
-    # CUDA and GPU information
-    print(f"CUDA Available: {torch.cuda.is_available()}")
-    print(f"CUDA Version: {torch.version.cuda}")
-    print(f"GPU Device: {[torch.cuda.get_device_name(d) for d in [d for d in range(torch.cuda.device_count())]]}")
+    # GPU information
+    if torch.backends.cuda.is_built() and torch.cuda.is_available():
+        print(f"CUDA Available: {torch.cuda.is_available()}")
+        print(f"CUDA Version: {torch.version.cuda}")
+        print(f"Available CUDA GPUs: {[torch.cuda.get_device_name(d) for d in range(torch.cuda.device_count())]}")
+    elif torch.backends.mps.is_built() and torch.backends.mps.is_available():
+        print(f"MPS Available: {torch.backends.mps.is_available()}")
+    elif torch.backends.cuda.is_built() or torch.backends.mps.is_built():
+        print("GPU support built with PyTorch, but could not find any GPU device.")
+    else:
+        print("No GPU backend (CUDA or MPS) built into this PyTorch install.")
+        print("Install a PyTorch version with GPU support if you want to utilize GPUs.")
     
     # Python version and executable
     print(f"Python Executable: {sys.executable}")
