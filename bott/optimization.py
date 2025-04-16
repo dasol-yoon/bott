@@ -69,6 +69,8 @@ def run_one_trial(
     current_directory = os.getcwd()
     results_dir = f"{current_directory}/results/{problem_name}/{algo}/"
     os.makedirs(results_dir, exist_ok=True)
+    print(f"Acquisition algo: {algo}")
+    print(f"Trial seed: {trial}")
     print(f"problem.device : {problem.device}")
     print(f"GP model device: {device_botorch}")
     
@@ -86,7 +88,7 @@ def run_one_trial(
 
     # Physical images output 
     input_params = X.tolist()
-    outputs_np = np.array([problem.physics_model(*param) for param in input_params])
+    outputs_np = np.array([problem.get_physics_simu(*param) for param in input_params])
     image_output = torch.tensor(outputs_np, dtype=dtype, device=device)
     if noisy:
         image_output = image_output + torch.normal(0,1,size=image_output.shape)
@@ -141,7 +143,7 @@ def run_one_trial(
         # Run physical model with a new_x
         input_param = new_x.tolist()[0] # [value0, value1, value2]
         time_simu_start = time_sync()
-        image_temp = torch.from_numpy(problem.physics_model(*input_param)).to(dtype=dtype, device=device)
+        image_temp = torch.from_numpy(problem.get_physics_simu(*input_param)).to(dtype=dtype, device=device)
         time_simu_end = time_sync()
         # image_output = torch.cat((image_output, image_temp.unsqueeze(0)),dim=0) # This will continue to concat new images but image_output is never used. We should remove this unless it's needed somewhere else.
         

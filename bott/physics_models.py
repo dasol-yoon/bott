@@ -3,7 +3,7 @@
 from bott.utils import get_default_abtem_params
 
 
-def simulate_potential(thickness, params_abtem=None, device_abtem='cpu'):
+def simulate_potential(thickness, params_abtem=None, device_simu='cpu'):
     '''
     This one is for future gradient descent purpose
     The potential will be returned, and we'll generate the measurement based on some in-house multislice simulation code with tilted propagator
@@ -40,18 +40,18 @@ def simulate_potential(thickness, params_abtem=None, device_abtem='cpu'):
     import dask
     import numpy as np
 
-    if device_abtem == 'gpu':
+    if device_simu == 'gpu':
         import cupy as xp
         abtem.config.set({"dask.chunk-size-gpu" : "2048 MB"})
         dask.config.set({"num_workers": 1})
-    elif device_abtem == 'cpu':
+    elif device_simu == 'cpu':
         import numpy as xp
     else:
-        raise ValueError(f"device_abtem '{device_abtem}' not implemented yet, please use 'cpu', or 'gpu'!")
+        raise ValueError(f"device_simu '{device_simu}' not implemented yet, please use 'cpu', or 'gpu'!")
 
     # abtem configure
     abtem.config.set({"local_diagnostics.progress_bar": False})
-    abtem.config.set({"device": device_abtem})
+    abtem.config.set({"device": device_simu})
     
     # Setup cell
     unit_cell = ase.io.read(path_crystal)
@@ -76,12 +76,12 @@ def simulate_potential(thickness, params_abtem=None, device_abtem='cpu'):
     # print(f"potential.shape = {potential.shape}")
     
     # Cast potential_arr into numpy array
-    if device_abtem == 'gpu':
+    if device_simu == 'gpu':
         potential_arr = potential_arr.get()
     
     return potential_arr
     
-def simulate_cbed(thickness, tilt_x, tilt_y, params_abtem=None, device_abtem='cpu'):
+def simulate_cbed(thickness, tilt_x, tilt_y, params_abtem=None, device_simu='cpu'):
     
     if params_abtem is None:
         params_abtem = get_default_abtem_params()
@@ -120,18 +120,18 @@ def simulate_cbed(thickness, tilt_x, tilt_y, params_abtem=None, device_abtem='cp
     import dask
     import numpy as np
 
-    if device_abtem == 'gpu':
+    if device_simu == 'gpu':
         import cupy as xp
         abtem.config.set({"dask.chunk-size-gpu" : "2048 MB"})
         dask.config.set({"num_workers": 1})
-    elif device_abtem == 'cpu':
+    elif device_simu == 'cpu':
         import numpy as xp
     else:
-        raise ValueError(f"device_abtem '{device_abtem}' not implemented yet, please use 'cpu', or 'gpu'!")
+        raise ValueError(f"device_simu '{device_simu}' not implemented yet, please use 'cpu', or 'gpu'!")
 
     # abtem configure
     abtem.config.set({"local_diagnostics.progress_bar": False})
-    abtem.config.set({"device": device_abtem})
+    abtem.config.set({"device": device_simu})
 
     # Setup cell
     unit_cell = ase.io.read(path_crystal)
@@ -184,7 +184,7 @@ def simulate_cbed(thickness, tilt_x, tilt_y, params_abtem=None, device_abtem='cp
         measurement = cbeds.array
 
     # Cast measurement into numpy array
-    if device_abtem == 'gpu':
+    if device_simu == 'gpu':
         measurement = measurement.get()
     
     return measurement
