@@ -43,6 +43,8 @@ def run_one_trial(
         metrics: List[str]=['obs_val'],
         objective: Optional[MCAcquisitionObjective] = None,
         noisy: Optional[bool]=False,
+        device_botorch: str='cpu',
+        dtype: torch.dtype = torch.double
 )-> None:
     '''Run one trial of BO loop for the given problem (tile pattern) and algorithm
 
@@ -61,14 +63,13 @@ def run_one_trial(
     '''
 
     # Setup
-    dtype = problem.dtype
-    device = problem.device
+    device = torch.device(device_botorch)
     current_directory = os.getcwd()
     results_dir = f"{current_directory}/results/{problem_name}/{algo}/"
     os.makedirs(results_dir, exist_ok=True)
 
     if objective is None:
-        objective = GenericMCObjective(lambda Y, X=None: ((Y[...,:-1]-problem.reduction_true).pow(2)+Y[...,[-1]]).sum(dim=-1))
+        objective = GenericMCObjective(lambda Y, X=None: ((Y[...,:-1]-problem.reduction_true.to(device)).pow(2)+Y[...,[-1]]).sum(dim=-1))
 
     # set random seed
     torch.manual_seed(trial)
@@ -86,12 +87,12 @@ def run_one_trial(
         image_output = image_output + torch.normal(0,1,size=image_output.shape)
     
     # calculate final objective (SSE), this is pixelSSE. Might consider rename SSE_value into pixel_losses, and make reduction_SSE into group_loss.
-    SSE_value  = SSE(y_simu=image_output, y_true=problem.measurement_true, dp_pow=1, reduce=False).unsqueeze(-1) # SSE_value = [n_init, 1]
+    SSE_value  = SSE(y_simu=image_output, y_true=problem.measurement_true.to(device), dp_pow=1, reduce=False).unsqueeze(-1) # SSE_value = [n_init, 1]
 
     # calculate reduction intermediate outputs for EICF in batch
     if algo=='EICF':
-        y_reduction = problem.reduction_func(image_output)  # [n_init, num_tiles]
-        reduction_SSE = SSE(y_simu=y_reduction, y_true=problem.reduction_true, dp_pow=1, reduce=False).unsqueeze(-1) # [n_init, 1]
+        y_reduction = problem.reduction_func(image_output).to(device)  # [n_init, num_tiles]
+        reduction_SSE = SSE(y_simu=y_reduction, y_true=problem.reduction_true.to(device), dp_pow=1, reduce=False).unsqueeze(-1) # [n_init, 1]
         epsilon = SSE_value - reduction_SSE
         y_value = torch.cat((y_reduction,epsilon),dim=-1) # [n_init, num_tiles+1]
             
@@ -117,7 +118,7 @@ def run_one_trial(
         
         # Get new sample with timing
         start_time = time.time()
-        new_x, acqf_val = get_new_sample(model=model,algo=algo,problem=problem,best_val=best_val,objective=objective)
+        new_x, acqf_val = get_new_sample(model=model,algo=algo,problem=problem,best_val=best_val,objective=objective, device=device, dtype=dtype)
         running_time = time.time()-start_time
         
         # Append and concat new values       
@@ -131,13 +132,13 @@ def run_one_trial(
         # image_output = torch.cat((image_output, image_temp.unsqueeze(0)),dim=0) # This will continue to concat new images but image_output is never used. We should remove this unless it's needed somewhere else.
         
         # calculate final objective (SSE)
-        new_SSE = SSE(y_simu=image_temp,y_true=problem.measurement_true,dp_pow=1).unsqueeze(0).unsqueeze(0) # [1,1]
+        new_SSE = SSE(y_simu=image_temp,y_true=problem.measurement_true.to(device),dp_pow=1).unsqueeze(0).unsqueeze(0) # [1,1]
         SSE_value = torch.cat((SSE_value, new_SSE), dim=0)
 
         # calculate reduction intermediate outputs for EICF
         if algo=='EICF':
-            y_reduction = problem.reduction_func(image_temp) # [num_tiles,]
-            reduction_SSE = SSE(y_simu=y_reduction,y_true=problem.reduction_true,dp_pow=1).unsqueeze(0) # [1,]
+            y_reduction = problem.reduction_func(image_temp).to(device) # [num_tiles,]
+            reduction_SSE = SSE(y_simu=y_reduction,y_true=problem.reduction_true.to(device),dp_pow=1).unsqueeze(0) # [1,]
             epsilon = SSE_value[-1] - reduction_SSE
             y_temp = torch.cat((y_reduction,epsilon),dim=-1).unsqueeze(0) # [1,num_tiles+1]
             y_value = torch.cat((y_value,y_temp),dim=0)
@@ -170,7 +171,7 @@ def run_one_trial(
         }
         torch.save(BO_results, results_dir + f"trial_{trial}.pt")
 
-def get_new_sample(model,algo, problem,best_val,objective):
+def get_new_sample(model,algo, problem,best_val,objective, device='cpu', dtype=torch.double):
     '''Produce a new sample or batch to evaluate the objective function
 
     Args:
@@ -181,24 +182,20 @@ def get_new_sample(model,algo, problem,best_val,objective):
         - a tuple consisting of a tensor of the new suggested input to evaluate or batch of inputs and the corresponding acquisition value
     '''
     
-    # Setup
-    dtype = problem.dtype
-    device = problem.device
-    
     if algo == 'EI':
         acqf = LogExpectedImprovement(model=model,best_f=best_val)
-        new_x, acqf_val = optimize_acqf(acq_function=acqf,bounds=problem.bounds.to(device=device),q=1,num_restarts=20,raw_samples=100)        
+        new_x, acqf_val = optimize_acqf(acq_function=acqf,bounds=problem.bounds.to(dtype=dtype, device=device),q=1,num_restarts=20,raw_samples=100)        
         return new_x, acqf_val
     elif algo == 'KG':  
         acqf = qKnowledgeGradient(model, num_fantasies=128)
-        new_x, acqf_val = optimize_acqf(acq_function=acqf,bounds=problem.bounds.to(device=device),q=1,num_restarts=10,raw_samples=512)
+        new_x, acqf_val = optimize_acqf(acq_function=acqf,bounds=problem.bounds.to(dtype=dtype, device=device),q=1,num_restarts=10,raw_samples=512)
         return new_x, acqf_val 
     elif algo == 'EICF':
-        sampler = SobolQMCNormalSampler(torch.Size([1024])).to(device=device)
-        EICF = qLogExpectedImprovement(model=model, best_f=best_val, objective=objective,sampler=sampler).to(device=device)
+        sampler = SobolQMCNormalSampler(torch.Size([1024])).to(dtype=dtype, device=device)
+        EICF = qLogExpectedImprovement(model=model, best_f=best_val, objective=objective,sampler=sampler).to(dtype=dtype, device=device)
         new_x, acqf_val = optimize_acqf(
             acq_function=EICF,
-            bounds=problem.bounds.to(device=device),
+            bounds=problem.bounds.to(dtype=dtype, device=device),
             q=1,
             num_restarts=50,
             raw_samples=100,
@@ -208,7 +205,7 @@ def get_new_sample(model,algo, problem,best_val,objective):
         acq_function = ThompsonSampling(model=model)
         new_x, acqf_val = optimize_acqf(
             acq_function=acq_function,
-            bounds=problem.bounds.to(device=device),
+            bounds=problem.bounds.to(dtype=dtype, device=device),
             q=1,
             num_restarts=20,
             raw_samples=100,
@@ -219,7 +216,7 @@ def get_new_sample(model,algo, problem,best_val,objective):
         new_x = (
             torch.rand([1, problem.dim]) * (problem.bounds[1] - problem.bounds[0])
             + problem.bounds[0]
-        )
+        ).to(dtype=dtype, device=device)
         return new_x, None
     else:
         raise ValueError(f"The current implementation does not support algo = '{algo}', please use either 'EI, 'EICF', or 'Random'")
