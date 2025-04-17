@@ -28,7 +28,6 @@ from botorch.test_functions import SyntheticTestFunction
 from botorch.utils.sampling import draw_sobol_samples
 from gpytorch.mlls import ExactMarginalLogLikelihood
 
-from bott.loss import MSE, NRMSE, SSE
 from bott.ts_acqf import ThompsonSampling
 from bott.utils import time_sync
 
@@ -40,9 +39,9 @@ def run_one_trial(
         trial: int,
         n_init_evals: int,
         max_iter: int,
-        metrics: List[str]=['obs_val'],
+        # metrics: List[str]=['obs_val'],
         objective: Optional[MCAcquisitionObjective] = None,
-        noisy: Optional[bool]=False,
+        # noisy: Optional[bool]=False,
         dtype: torch.dtype = torch.double,
         device_botorch: str='cpu'
 )-> None:
@@ -94,8 +93,8 @@ def run_one_trial(
     input_params = X.tolist()
     outputs_np = np.array([problem.get_physics_simu(*param) for param in input_params])
     image_output = torch.tensor(outputs_np, dtype=dtype, device=device)
-    if noisy:
-        image_output = image_output + torch.normal(0,1,size=image_output.shape)
+    # if noisy: # TODO The noise on PACBED is better described by Poisson
+    #     image_output = image_output + torch.normal(0,1,size=image_output.shape)
     
     # calculate final objective (Loss), this is pixelSSE. Might consider rename SSE_value into pixel_losses, and make reduction_SSE into group_loss.
     pixelLoss  = loss_func(y_simu=image_output, y_true=measurement_true, reduce=False).unsqueeze(-1) # pixelLoss = [n_init, 1]
@@ -108,29 +107,29 @@ def run_one_trial(
         y_value = torch.cat((y_reduction,epsilon),dim=-1) # [n_init, num_tiles+1]
             
     obj = -1*pixelLoss # maximization direction
-    best_vals = [obj.max().item()] # list of values
     best_val = obj.max() # tensor
     acqf_vals = []
     acqf_runtime = []
     
     time_init_end = time_sync()
     print(f"Initializing model with '{n_init_evals}' initial evaluations took {time_init_end - time_init_start:.3f} sec")
+    print("==========================================================")
     
     # Start the optimization loop
-    for iter in range(max_iter):
+    for iter in range(n_init_evals, max_iter): # Feel like we should match the value with len(X)
         
         time_iter_start = time_sync()
         
         # Choose the acquisition function algorithm
         if algo in ['EI','KG','Random','TS']:
-            train_Y = pixelLoss
+            train_Y = obj
         else:
             train_Y = y_value
         
         # Get model #TODO Do we really need to create model with every iteration?
         time_model_start = time_sync()
-        model = SingleTaskGP(train_X=X, train_Y=train_Y, train_Yvar=torch.ones_like(train_Y) * 0.0001, # #TODO Need to configure this variance scaling hyperparameter
-                        outcome_transform=Standardize(m=train_Y.shape[-1]),input_transform=Normalize(d=X.shape[-1])).to(device) # GP is on y, not the objective
+        model = SingleTaskGP(train_X=X, train_Y=train_Y, train_Yvar=None, #torch.ones_like(train_Y) * 0.0001, #TODO Need to configure this variance scaling hyperparameter
+                        outcome_transform=Standardize(m=train_Y.shape[-1]),input_transform=Normalize(d=X.shape[-1])).to(device)
         fit_gpytorch_mll(ExactMarginalLogLikelihood(model.likelihood, model))
         time_model_end = time_sync()
         
@@ -164,12 +163,10 @@ def run_one_trial(
             y_value = torch.cat((y_value,y_temp),dim=0)
         
         # Display and save results
-        # TODO: Need to double check these values and printing, felt like the optimizaiton direciton is off
         obj = -1*pixelLoss
-        best_vals.append(obj.max().item())
         best_val = obj.max()
-        print(f"pixelLoss = {pixelLoss}")
-        print(f"best_vals = {best_vals}")
+        best_idx = torch.argmax(obj.squeeze(-1))
+        best_params = X[best_idx].cpu().numpy()
         
         time_iter_end = time_sync()
         
@@ -178,17 +175,18 @@ def run_one_trial(
         print(f"Acqu func sampling time: {time_sample_end - time_sample_start:.3f} sec")
         print(f"Physics simulation time: {time_simu_end - time_simu_start:.3f} sec")
         print(f"Iteration time: {time_iter_end - time_iter_start:.3f} sec")
-        print(f"Suggested point: {new_x}")
-        print(f"new Loss value: {pixelLoss[-1]}")
+        print(f"Suggested point: {new_x.cpu().numpy()}")
+        print(f"new Loss value: {new_Loss.cpu().numpy()}")
         if algo not in ['EI','KG','Random','TS']:
             print(f"Reduction valued: {y_temp}")
-        print(f"Best objective function value found: {-1*best_val}")
+        print(f"Best iteration index found: {best_idx+1}")  
+        print(f"Best point found: {best_params}")
+        print(f"Best objective function value found: {best_val}")
         print(f"==========================================================")
         BO_results = {
             "max_iter": max_iter,
             "acqf_runtime": acqf_runtime,
             "acqf_val_list": acqf_vals,
-            "best_obs_vals": best_vals,
             "train_X": X,
             "train_Y": train_Y,
             "obj_func_val": obj,
