@@ -45,9 +45,11 @@ def SSE(y_simu, y_true, dp_pow, reduce=True):
     y_simu = safe_power(y_simu, dp_pow)
     y_true = safe_power(y_true, dp_pow)
     if reduce:
-        reduce_dims = tuple(range(y_simu.ndim))
+        # this section is for objective used in EICF
+        reduce_dims = [-1] # only sum over n_tiles
+        y_true = y_true.unsqueeze(0).unsqueeze(0) #original shape is [1,n_tile] > [1,1,1,n_tiles] to support [num_sample,batch,q,n_tiles]
     else: 
-        reduce_dims = tuple(range(1, y_simu.ndim))
+        reduce_dims = tuple(range(-y_true.ndim, 0))
     return (y_simu-y_true).pow(2).sum(dim=reduce_dims)
 
 def MSE(y_simu, y_true, dp_pow, reduce=True):
