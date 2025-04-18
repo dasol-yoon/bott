@@ -79,7 +79,7 @@ def run_one_trial(
     
     if objective is None:
         # objective = GenericMCObjective(lambda Y, X=None: ((Y[...,:-1]-problem.reduction_true.to(device)).pow(2)+Y[...,[-1]]).sum(dim=-1)) #TODO: The sum dimension is still a bit unclear
-        objective = GenericMCObjective(lambda Y, X=None: (loss_func(Y[...,:-1], reduction_true) + Y[...,[-1]]).sum(dim=-1))
+        objective = GenericMCObjective(lambda Y, X=None: -1*(loss_func(Y[...,:-1], reduction_true,reduce=True) + Y[...,-1]))
 
     # set random seed
     torch.manual_seed(trial)
@@ -93,6 +93,7 @@ def run_one_trial(
     input_params = X.tolist()
     outputs_np = np.array([problem.get_physics_simu(*param) for param in input_params])
     image_output = torch.tensor(outputs_np, dtype=dtype, device=device)
+    print(f"image output shape {image_output.shape}")
     # if noisy: # TODO The noise on PACBED is better described by Poisson
     #     image_output = image_output + torch.normal(0,1,size=image_output.shape)
     
@@ -151,15 +152,16 @@ def run_one_trial(
         # image_output = torch.cat((image_output, image_temp.unsqueeze(0)),dim=0) # This will continue to concat new images but image_output is never used. We should remove this unless it's needed somewhere else.
         
         # calculate final objective (Loss)
-        new_Loss = loss_func(y_simu=image_temp,y_true=measurement_true).unsqueeze(0).unsqueeze(0) # [1,1]
+        new_Loss = loss_func(y_simu=image_temp.unsqueeze(0),y_true=measurement_true,reduce=False).unsqueeze(-1) # [1,1]
         pixelLoss = torch.cat((pixelLoss, new_Loss), dim=0)
 
         # calculate reduction intermediate outputs for EICF
         if algo=='EICF':
             y_reduction = problem.reduction_func(image_temp).to(device) # [num_tiles,]
-            reductionLoss = loss_func(y_simu=y_reduction,y_true=reduction_true).unsqueeze(0) # [1,]
+            reductionLoss = loss_func(y_simu=y_reduction.unsqueeze(0),y_true=reduction_true,reduce=False).unsqueeze(0) # [1,]
             epsilon = pixelLoss[-1] - reductionLoss
-            y_temp = torch.cat((y_reduction,epsilon),dim=-1).unsqueeze(0) # [1,num_tiles+1]
+            y_temp = torch.cat((y_reduction.unsqueeze(0),epsilon),dim=-1) # [1,num_tiles+1]
+            print(f"y_temp {y_temp}")
             y_value = torch.cat((y_value,y_temp),dim=0)
         
         # Display and save results
