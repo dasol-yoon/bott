@@ -78,8 +78,7 @@ def run_one_trial(
     measurement_true = problem.measurement_true.to(device)
     
     if objective is None:
-        # objective = GenericMCObjective(lambda Y, X=None: ((Y[...,:-1]-problem.reduction_true.to(device)).pow(2)+Y[...,[-1]]).sum(dim=-1)) #TODO: The sum dimension is still a bit unclear
-        objective = GenericMCObjective(lambda Y, X=None: (loss_func(Y[...,:-1], reduction_true) + Y[...,[-1]]).sum(dim=-1))
+        objective = GenericMCObjective(lambda Y, X=None: -1*((Y[...,:-1] - reduction_true).pow(2).sum(-1) + Y[...,-1])) # loss(...) = [n_samples] ; Y[...,-1] = epsilon = [n_samples]
 
     # set random seed
     torch.manual_seed(trial)
@@ -161,6 +160,11 @@ def run_one_trial(
             epsilon = pixelLoss[-1] - reductionLoss
             y_temp = torch.cat((y_reduction,epsilon),dim=-1).unsqueeze(0) # [1,num_tiles+1]
             y_value = torch.cat((y_value,y_temp),dim=0)
+            print(f"y_reduction.shape = {y_reduction.shape}")
+            print(f"reductionLoss.shape = {reductionLoss.shape}")
+            print(f"epsilon.shape={epsilon.shape}")
+            print(f"y_temp.shape={y_temp.shape}")
+            print(f"y_value.shape={y_value.shape}")
         
         # Display and save results
         obj = -1*pixelLoss
@@ -178,7 +182,7 @@ def run_one_trial(
         print(f"Suggested point: {new_x.cpu().numpy()}")
         print(f"new Loss value: {new_Loss.cpu().numpy()}")
         if algo not in ['EI','KG','Random','TS']:
-            print(f"Reduction valued: {y_temp}")
+            print(f"Reduction valued: {y_temp.cpu().numpy()}")
         print(f"Best iteration index found: {best_idx+1}")  
         print(f"Best point found: {best_params}")
         print(f"Best objective function value found: {best_val}")
