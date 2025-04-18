@@ -79,7 +79,7 @@ def run_one_trial(
     
     if objective is None:
         # objective = GenericMCObjective(lambda Y, X=None: ((Y[...,:-1]-problem.reduction_true.to(device)).pow(2)+Y[...,[-1]]).sum(dim=-1)) #TODO: The sum dimension is still a bit unclear
-        objective = GenericMCObjective(lambda Y, X=None: -1*(loss_func(Y[...,:-1], reduction_true,reduce=True) + Y[...,-1]))
+        objective = GenericMCObjective(lambda Y, X=None: -1*(loss_func(Y[...,:-1], reduction_true,reduce=True) + Y[...,-1])) # should return sample_shape x batch_size x q 
 
     # set random seed
     torch.manual_seed(trial)
