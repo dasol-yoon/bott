@@ -1,6 +1,9 @@
 name: bott
 channels:
+  - pytorch
+  - nvidia
   - conda-forge
+  - defaults
 dependencies:
   - abtem
   - botorch=0.13
