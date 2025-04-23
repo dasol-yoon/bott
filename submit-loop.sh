@@ -11,7 +11,7 @@ do
                 sbatch -J PB_${trial}_${algo} \
                        -o ./output/${trial}_${algo}_%j.out \
                        -e ./output/${trial}_${algo}_%j.err \
-                       --requeue submit.sub ${trial} ${algo} ${num_iter} ${param_truth}
+                       --requeue submit.sub ${trial} ${algo} ${num_iter} "$param_truth"
                 sleep 0.1s
             done
         done
