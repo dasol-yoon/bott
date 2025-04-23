@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
+import argparse
 
+import logging
 import os
 import random
 from typing import Dict, List, Optional, Tuple, Union
@@ -30,7 +32,6 @@ from gpytorch.mlls import ExactMarginalLogLikelihood
 
 from bott.ts_acqf import ThompsonSampling
 from bott.utils import time_sync
-
 
 def run_one_trial(
         problem_name: str,
@@ -68,10 +69,14 @@ def run_one_trial(
     current_directory = os.getcwd()
     results_dir = f"{current_directory}/results/{problem_name}/{algo}/"
     os.makedirs(results_dir, exist_ok=True)
-    print(f"Acquisition algo: {algo}")
-    print(f"Trial seed: {trial}")
-    print(f"problem.device : {problem.device}")
-    print(f"GP model device: {device_botorch}")
+    logging.basicConfig(level=logging.INFO,  # Adjust log level as needed (DEBUG, INFO, etc.)
+                    format='%(asctime)s - %(levelname)s - %(message)s')
+
+    logger = logging.getLogger(__name__)  # Get a logger for the current module
+    logger.info(f"Acquisition algo: {algo}")
+    logger.info(f"Trial seed: {trial}")
+    logger.info(f"problem.device : {problem.device}")
+    logger.info(f"GP model device: {device_botorch}")
     
     loss_func = problem.loss_func
     reduction_true = problem.reduction_true.to(device)
@@ -93,7 +98,7 @@ def run_one_trial(
     input_params = X.tolist()
     outputs_np = np.array([problem.get_physics_simu(*param) for param in input_params])
     image_output = torch.tensor(outputs_np, dtype=dtype, device=device)
-    print(f"image output shape {image_output.shape}")
+    logger.info(f"image output shape {image_output.shape}")
     # if noisy: # TODO The noise on PACBED is better described by Poisson
     #     image_output = image_output + torch.normal(0,1,size=image_output.shape)
     
@@ -113,8 +118,8 @@ def run_one_trial(
     acqf_runtime = []
     
     time_init_end = time_sync()
-    print(f"Initializing model with '{n_init_evals}' initial evaluations took {time_init_end - time_init_start:.3f} sec")
-    print("==========================================================")
+    logger.info(f"Initializing model with '{n_init_evals}' initial evaluations took {time_init_end - time_init_start:.3f} sec")
+    logger.info("==========================================================")
     
     # Start the optimization loop
     for iter in range(n_init_evals, max_iter): # Feel like we should match the value with len(X)
@@ -161,7 +166,7 @@ def run_one_trial(
             reductionLoss = loss_func(y_simu=y_reduction.unsqueeze(0),y_true=reduction_true,reduce=False).unsqueeze(0) # [1,]
             epsilon = pixelLoss[-1] - reductionLoss
             y_temp = torch.cat((y_reduction.unsqueeze(0),epsilon),dim=-1) # [1,num_tiles+1]
-            print(f"y_temp {y_temp}")
+            logger.info(f"y_temp {y_temp}")
             y_value = torch.cat((y_value,y_temp),dim=0)
         
         # Display and save results
@@ -172,19 +177,19 @@ def run_one_trial(
         
         time_iter_end = time_sync()
         
-        print(f"\nIteration: {iter+1}/{max_iter}")
-        print(f"GP model fitting time: {time_model_end - time_model_start:.3f} sec")
-        print(f"Acqu func sampling time: {time_sample_end - time_sample_start:.3f} sec")
-        print(f"Physics simulation time: {time_simu_end - time_simu_start:.3f} sec")
-        print(f"Iteration time: {time_iter_end - time_iter_start:.3f} sec")
-        print(f"Suggested point: {new_x.cpu().numpy()}")
-        print(f"new Loss value: {new_Loss.cpu().numpy()}")
+        logger.info(f"\nIteration: {iter+1}/{max_iter}")
+        logger.info(f"GP model fitting time: {time_model_end - time_model_start:.3f} sec")
+        logger.info(f"Acqu func sampling time: {time_sample_end - time_sample_start:.3f} sec")
+        logger.info(f"Physics simulation time: {time_simu_end - time_simu_start:.3f} sec")
+        logger.info(f"Iteration time: {time_iter_end - time_iter_start:.3f} sec")
+        logger.info(f"Suggested point: {new_x.cpu().numpy()}")
+        logger.info(f"new Loss value: {new_Loss.cpu().numpy()}")
         if algo not in ['EI','KG','Random','TS']:
-            print(f"Reduction valued: {y_temp}")
-        print(f"Best iteration index found: {best_idx+1}")  
-        print(f"Best point found: {best_params}")
-        print(f"Best objective function value found: {best_val}")
-        print(f"==========================================================")
+            logger.info(f"Reduction valued: {y_temp}")
+        logger.info(f"Best iteration index found: {best_idx+1}")  
+        logger.info(f"Best point found: {best_params}")
+        logger.info(f"Best objective function value found: {best_val}")
+        logger.info(f"==========================================================")
         BO_results = {
             "max_iter": max_iter,
             "acqf_runtime": acqf_runtime,
@@ -199,7 +204,7 @@ def run_one_trial(
             },
         }
         torch.save(BO_results, results_dir + f"trial_{trial}.pt")
-    print(f"\nTotal run time with '{max_iter}' iters: {time_sync() - time_init_start:.3f} sec")
+    logger.info(f"\nTotal run time with '{max_iter}' iters: {time_sync() - time_init_start:.3f} sec")
 
 def get_new_sample(model,algo, problem,best_val,objective, device='cpu', dtype=torch.double):
     '''Produce a new sample or batch to evaluate the objective function
@@ -250,3 +255,14 @@ def get_new_sample(model,algo, problem,best_val,objective, device='cpu', dtype=t
         return new_x, None
     else:
         raise ValueError(f"The current implementation does not support algo = '{algo}', please use either 'EI, 'EICF', or 'Random'")
+
+def parse():
+    """Parse command line arguments."""
+    parser = argparse.ArgumentParser(
+        description="Run one replication of a BO experiment."
+    )
+    parser.add_argument("--trial", "-t", type=int, default=0)
+    parser.add_argument("--algo", "-a", type=str, default="EI")
+    parser.add_argument('--param_truth', "-p", type=float, nargs=3, required=True, help='Three param truth values')
+    parser.add_argument("--num_iter", "-n", type=int, default=50)
+    return parser.parse_args()
