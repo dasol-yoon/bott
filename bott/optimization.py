@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import argparse
-
 import logging
 import os
 import random
@@ -33,6 +32,7 @@ from gpytorch.mlls import ExactMarginalLogLikelihood
 from bott.ts_acqf import ThompsonSampling
 from bott.utils import time_sync
 
+
 def run_one_trial(
         problem_name: str,
         problem: SyntheticTestFunction,
@@ -44,7 +44,8 @@ def run_one_trial(
         objective: Optional[MCAcquisitionObjective] = None,
         # noisy: Optional[bool]=False,
         dtype: torch.dtype = torch.double,
-        device_botorch: str='cpu'
+        device_botorch: str='cpu',
+        force_restart:Optional[bool]= False,
 )-> None:
     '''Run one trial of BO loop for the given problem (tile pattern) and algorithm
 
@@ -71,55 +72,85 @@ def run_one_trial(
     os.makedirs(results_dir, exist_ok=True)
     logging.basicConfig(level=logging.INFO,  # Adjust log level as needed (DEBUG, INFO, etc.)
                     format='%(asctime)s - %(levelname)s - %(message)s')
-
     logger = logging.getLogger(__name__)  # Get a logger for the current module
-    logger.info(f"Acquisition algo: {algo}")
-    logger.info(f"Trial seed: {trial}")
-    logger.info(f"problem.device : {problem.device}")
-    logger.info(f"GP model device: {device_botorch}")
-    
     loss_func = problem.loss_func
     reduction_true = problem.reduction_true.to(device)
     measurement_true = problem.measurement_true.to(device)
-    
+
     if objective is None:
         # objective = GenericMCObjective(lambda Y, X=None: ((Y[...,:-1]-problem.reduction_true.to(device)).pow(2)+Y[...,[-1]]).sum(dim=-1)) #TODO: The sum dimension is still a bit unclear
         objective = GenericMCObjective(lambda Y, X=None: -1*(loss_func(Y[...,:-1], reduction_true,reduce=True) + Y[...,-1])) # should return sample_shape x batch_size x q 
-
-    # set random seed
-    torch.manual_seed(trial)
-    np.random.seed(trial)
-    random.seed(trial)
-
-    # random initial points and calculate intermediate outputs [cbed]
-    X=draw_sobol_samples(bounds=problem.bounds.to(device=device),n=n_init_evals,q=1).squeeze(-2) # X = [n_init, problem.dim], note that X is by default on cpu because problem.bounds is also on cpu
-
-    # Physical images output 
-    input_params = X.tolist()
-    outputs_np = np.array([problem.get_physics_simu(*param) for param in input_params])
-    image_output = torch.tensor(outputs_np, dtype=dtype, device=device)
-    logger.info(f"image output shape {image_output.shape}")
-    # if noisy: # TODO The noise on PACBED is better described by Poisson
-    #     image_output = image_output + torch.normal(0,1,size=image_output.shape)
     
-    # calculate final objective (Loss), this is pixelSSE. Might consider rename SSE_value into pixel_losses, and make reduction_SSE into group_loss.
-    pixelLoss  = loss_func(y_simu=image_output, y_true=measurement_true, reduce=False).unsqueeze(-1) # pixelLoss = [n_init, 1]
+    # check if we have run the experiment. If yes, load the previous result and continue. Otherwise, start from the beginning.
+    if os.path.exists(results_dir + f"trial_{trial}.pt") and not force_restart:
+        logger.info(
+            f"============================Resume Experiment=================================\n"
+            f"Experiment: {problem_name}\n"
+            f"Acquisition algo: {algo}\n"
+            f"Trial seed: {trial}\n"
+            f"problem.device : {problem.device}\n"
+            f"GP model device: {device_botorch}"
+        )
+        res = torch.load(results_dir + f"trial_{trial}.pt",weights_only=False)
+        # reset the random seed
+        torch.set_rng_state(res["random_states"]["torch"])
+        np.random.set_state(res["random_states"]["numpy"])
+        random.setstate(res["random_states"]["random"])
+        # Get data
+        X = res["train_X"]
+        train_Y = res["train_Y"]
+        acqf_vals = res['acqf_val_list']
+        acqf_runtime = res['acqf_runtime']
+        gp_runtime = res['gp_runtime']
+        physics_model_runtime = res['physics_model_runtime']
+        obj = res['obj_func_val']
+        n_init_evals = X.shape[0] 
+    else:
+        logger.info(
+            f"============================Start New Experiment=================================\n"
+            f"Experiment: {problem_name}\n"
+            f"Acquisition algo: {algo}\n"
+            f"Trial seed: {trial}\n"
+            f"problem.device : {problem.device}\n"
+            f"GP model device: {device_botorch}"
+        )
 
-    # calculate reduction intermediate outputs for EICF in batch
-    if algo=='EICF':
-        y_reduction = problem.reduction_func(image_output).to(device)  # [n_init, num_tiles]
-        reductionLoss = loss_func(y_simu=y_reduction, y_true=reduction_true, reduce=False).unsqueeze(-1) # [n_init, 1]
-        epsilon = pixelLoss - reductionLoss
-        y_value = torch.cat((y_reduction,epsilon),dim=-1) # [n_init, num_tiles+1]
+        # set random seed
+        torch.manual_seed(trial)
+        np.random.seed(trial)
+        random.seed(trial)
+
+        # random initial points and calculate intermediate outputs [cbed]
+        X=draw_sobol_samples(bounds=problem.bounds.to(device=device),n=n_init_evals,q=1).squeeze(-2) # X = [n_init, problem.dim], note that X is by default on cpu because problem.bounds is also on cpu
+
+        # Physical images output 
+        input_params = X.tolist()
+        outputs_np = np.array([problem.get_physics_simu(*param) for param in input_params])
+        image_output = torch.tensor(outputs_np, dtype=dtype, device=device)
+        logger.info(f"image output shape {image_output.shape}")
+        # if noisy: # TODO The noise on PACBED is better described by Poisson
+        #     image_output = image_output + torch.normal(0,1,size=image_output.shape)
+    
+        # calculate final objective (Loss), this is pixelSSE. Might consider rename SSE_value into pixel_losses, and make reduction_SSE into group_loss.
+        pixelLoss  = loss_func(y_simu=image_output, y_true=measurement_true, reduce=False).unsqueeze(-1) # pixelLoss = [n_init, 1]
+
+        # calculate reduction intermediate outputs for EICF in batch
+        if algo=='EICF':
+            y_reduction = problem.reduction_func(image_output).to(device)  # [n_init, num_tiles]
+            reductionLoss = loss_func(y_simu=y_reduction, y_true=reduction_true, reduce=False).unsqueeze(-1) # [n_init, 1]
+            epsilon = pixelLoss - reductionLoss
+            y_value = torch.cat((y_reduction,epsilon),dim=-1) # [n_init, num_tiles+1]
             
-    obj = -1*pixelLoss # maximization direction
-    best_val = obj.max() # tensor
-    acqf_vals = []
-    acqf_runtime = []
+        obj = -1*pixelLoss # maximization direction
+        best_val = obj.max() # tensor
+        acqf_vals = []
+        acqf_runtime = []
+        gp_runtime = []
+        physics_model_runtime =[]
     
-    time_init_end = time_sync()
-    logger.info(f"Initializing model with '{n_init_evals}' initial evaluations took {time_init_end - time_init_start:.3f} sec")
-    logger.info("==========================================================")
+        time_init_end = time_sync()
+        logger.info(f"Initializing model with '{n_init_evals}' initial evaluations took {time_init_end - time_init_start:.3f} sec")
+        logger.info("==========================================================")
     
     # Start the optimization loop
     for iter in range(n_init_evals, max_iter): # Feel like we should match the value with len(X)
@@ -147,6 +178,7 @@ def run_one_trial(
         # Append and concat new values       
         acqf_vals.append(acqf_val)
         acqf_runtime.append(time_sample_end - time_sample_start)
+        gp_runtime.append(time_model_end - time_init_start)
         X = torch.cat((X, new_x),dim=0)
         
         # Run physical model with a new_x
@@ -154,6 +186,7 @@ def run_one_trial(
         time_simu_start = time_sync()
         image_temp = torch.from_numpy(problem.get_physics_simu(*input_param)).to(dtype=dtype, device=device)
         time_simu_end = time_sync()
+        physics_model_runtime.append(time_simu_end-time_simu_start)
         # image_output = torch.cat((image_output, image_temp.unsqueeze(0)),dim=0) # This will continue to concat new images but image_output is never used. We should remove this unless it's needed somewhere else.
         
         # calculate final objective (Loss)
@@ -193,6 +226,8 @@ def run_one_trial(
         BO_results = {
             "max_iter": max_iter,
             "acqf_runtime": acqf_runtime,
+            "gp_runtime": gp_runtime,
+            "physics_model_runtime":physics_model_runtime,
             "acqf_val_list": acqf_vals,
             "train_X": X,
             "train_Y": train_Y,
