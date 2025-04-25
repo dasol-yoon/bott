@@ -7,7 +7,7 @@
 #SBATCH --mem=16GB                           # Server memory requested (per node)
 #SBATCH -t 48:00:00                           # Time limit (hh:mm:ss)
 #SBATCH --partition=frazier        # Request partition
-#SBATCH --gres=gpu:1                          # Request any available GPU
+#SBATCH --gres=gpu:2080ti:1                          # Request any available GPU
 
 # Parse arguments
 trial=$1
