@@ -1,0 +1,25 @@
+#!/bin/bash
+#SBATCH --mail-type=ALL                      # Request status by email 
+#SBATCH --mail-user=pb482@cornell.edu        # Email address to send results to.
+#SBATCH -N 1                                 # Total number of nodes requested
+#SBATCH -n 8                                 # Total number of cores requested
+#SBATCH --get-user-env                       # Retrieve the user's login environment
+#SBATCH --mem=16GB                           # Server memory requested (per node)
+#SBATCH -t 48:00:00                           # Time limit (hh:mm:ss)
+#SBATCH --partition=frazier        # Request partition
+#SBATCH --gres=gpu:1                          # Request any available GPU
+
+# Parse arguments
+trial=$1
+algo=$2
+num_iter=$3
+param1=$4
+
+echo "Running trial $trial with algo $algo, num_iter $num_iter"
+echo "param_truth: ($param1)"
+
+/home/pb482/miniconda3/envs/bott/bin/python ./runner.py \
+    --trial $trial \
+    --algo $algo \
+    --num_iter $num_iter \
+    --param_truth $param1
