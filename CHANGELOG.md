@@ -2,6 +2,9 @@
 
 All notable changes to this project will be documented in this file.
 
+## 2025.04.30
+- Conduct abTEM validation to investigate the total intensity variation with thickness, probe position, single CBED vs. PACBED, collection angle, and phonon.
+
 ## 2025.04.17
 - Fix the incorrect `train_Y = pixelLoss` assignment for EI so it's fitting a GP model with maximization direction
 - Improve printing with best value, best params, etc.
