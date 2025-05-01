@@ -6,7 +6,7 @@
 #SBATCH --get-user-env                       # Retrieve the user's login environment
 #SBATCH --mem=16GB                           # Server memory requested (per node)
 #SBATCH -t 48:00:00                           # Time limit (hh:mm:ss)
-#SBATCH --partition=frazier        # Request partition
+#SBATCH --partition=default_partition        # Request partition
 #SBATCH --gres=gpu:2080ti:1                          # Request any available GPU
 
 # Parse arguments
