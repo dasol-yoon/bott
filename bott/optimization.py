@@ -104,6 +104,7 @@ def run_one_trial(
         gp_runtime = res['gp_runtime']
         physics_model_runtime = res['physics_model_runtime']
         obj = res['obj_func_val']
+        best_val = obj.max()
         n_init_evals = X.shape[0] 
     else:
         logger.info(
