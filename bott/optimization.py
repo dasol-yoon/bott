@@ -104,6 +104,7 @@ def run_one_trial(
         gp_runtime = res['gp_runtime']
         physics_model_runtime = res['physics_model_runtime']
         obj = res['obj_func_val']
+        pixelLoss=res['pixelLoss']
         best_val = obj.max()
         n_init_evals = X.shape[0] 
     else:
@@ -228,6 +229,7 @@ def run_one_trial(
             "max_iter": max_iter,
             "acqf_runtime": acqf_runtime,
             "gp_runtime": gp_runtime,
+            "pixelLoss":pixelLoss,
             "physics_model_runtime":physics_model_runtime,
             "acqf_val_list": acqf_vals,
             "train_X": X,
