@@ -2,6 +2,9 @@
 
 All notable changes to this project will be documented in this file.
 
+## 2025.05.04
+- Add the vectorized forward model setup for batch, tilts, thicknesses, and omode in `gradient_descent_and_pytorch_multislice.ipynb`.
+
 ## 2025.04.30
 - Conduct abTEM validation to investigate the total intensity variation with thickness, probe position, single CBED vs. PACBED, collection angle, and phonon.
 
