@@ -106,7 +106,9 @@ def run_one_trial(
         obj = res['obj_func_val']
         pixelLoss=res['pixelLoss']
         best_val = obj.max()
-        n_init_evals = X.shape[0] 
+        n_init_evals = X.shape[0]
+        if algo == 'EICF':
+            y_value = res['y_value'] 
     else:
         logger.info(
             f"============================Start New Experiment=================================\n"
@@ -225,22 +227,41 @@ def run_one_trial(
         logger.info(f"Best point found: {best_params}")
         logger.info(f"Best objective function value found: {best_val}")
         logger.info(f"==========================================================")
-        BO_results = {
-            "max_iter": max_iter,
-            "acqf_runtime": acqf_runtime,
-            "gp_runtime": gp_runtime,
-            "pixelLoss":pixelLoss,
-            "physics_model_runtime":physics_model_runtime,
-            "acqf_val_list": acqf_vals,
-            "train_X": X,
-            "train_Y": train_Y,
-            "obj_func_val": obj,
-            "random_states": {
-                "torch": torch.get_rng_state(),
-                "numpy": np.random.get_state(),
-                "random": random.getstate(),
-            },
-        }
+        if algo == 'EICF':
+            BO_results = {
+                "max_iter": max_iter,
+                "acqf_runtime": acqf_runtime,
+                "gp_runtime": gp_runtime,
+                "pixelLoss":pixelLoss,
+                "physics_model_runtime":physics_model_runtime,
+                "acqf_val_list": acqf_vals,
+                "train_X": X,
+                "y_value": y_value,
+                "train_Y": train_Y,
+                "obj_func_val": obj,
+                "random_states": {
+                    "torch": torch.get_rng_state(),
+                    "numpy": np.random.get_state(),
+                    "random": random.getstate(),
+                },
+            }
+        else:
+            BO_results = {
+                "max_iter": max_iter,
+                "acqf_runtime": acqf_runtime,
+                "gp_runtime": gp_runtime,
+                "pixelLoss":pixelLoss,
+                "physics_model_runtime":physics_model_runtime,
+                "acqf_val_list": acqf_vals,
+                "train_X": X,
+                "train_Y": train_Y,
+                "obj_func_val": obj,
+                "random_states": {
+                    "torch": torch.get_rng_state(),
+                    "numpy": np.random.get_state(),
+                    "random": random.getstate(),
+                },
+            }
         torch.save(BO_results, results_dir + f"trial_{trial}.pt")
     logger.info(f"\nTotal run time with '{max_iter}' iters: {time_sync() - time_init_start:.3f} sec")
 
