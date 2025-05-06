@@ -2,6 +2,9 @@
 
 All notable changes to this project will be documented in this file.
 
+## 2025.05.06
+- Refine and correct the orientation of potential, probe position, CBED, and tilts of `gradient_descent_and_pytorch_multislice.ipynb`.
+
 ## 2025.05.04
 - Add the vectorized forward model setup for batch, tilts, thicknesses, and omode in `gradient_descent_and_pytorch_multislice.ipynb`.
 
