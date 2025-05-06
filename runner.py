@@ -1,12 +1,12 @@
+import logging
 import warnings
 
 import torch
 from botorch.exceptions import InputDataWarning
 
-from bott.optimization import run_one_trial, parse
+from bott.optimization import parse, run_one_trial
 from bott.physics_models import simulate_cbed
 from bott.problem import OptimizationProblem
-import logging
 
 logging.basicConfig(level=logging.INFO,  # Adjust log level as needed (DEBUG, INFO, etc.)
                     format='%(asctime)s - %(levelname)s - %(message)s')
