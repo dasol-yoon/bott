@@ -4,7 +4,7 @@
 #SBATCH -N 1                                 # Total number of nodes requested
 #SBATCH -n 8                                 # Total number of cores requested
 #SBATCH --get-user-env                       # Retrieve the user's login environment
-#SBATCH --mem=16GB                           # Server memory requested (per node)
+#SBATCH --mem=64GB                           # Server memory requested (per node)
 #SBATCH -t 48:00:00                           # Time limit (hh:mm:ss)
 #SBATCH --partition=default_partition        # Request partition
 #SBATCH --gres=gpu:2080ti:1                          # Request any available GPU
