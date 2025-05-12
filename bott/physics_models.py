@@ -81,7 +81,7 @@ def simulate_potential(thickness, params_abtem=None, device_simu='cpu'):
     
     return potential_arr
     
-def simulate_cbed(thickness, tilt_x, tilt_y, params_abtem=None, device_simu='cpu'):
+def simulate_cbed(thickness, tilt_x, tilt_y, params_abtem=None, device_simu='cpu', pbar=False):
     
     if params_abtem is None:
         params_abtem = get_default_abtem_params()
@@ -108,6 +108,7 @@ def simulate_cbed(thickness, tilt_x, tilt_y, params_abtem=None, device_simu='cpu
 
     scan_step_size = params_abtem["scan_step_size"]
     return_pacbed = params_abtem["return_pacbed"]
+    detector_angle = params_abtem["detector_angle"]
     
     
     ########################################################################################################################
@@ -175,7 +176,7 @@ def simulate_cbed(thickness, tilt_x, tilt_y, params_abtem=None, device_simu='cpu
     # print(f"grid_scan.axes_metadata = {grid_scan.axes_metadata}")
     
     # Get cbeds
-    cbeds = probe.multislice(scan = grid_scan, potential = potential).diffraction_patterns(max_angle='cutoff').reduce_ensemble().compute(progress_bar=False)
+    cbeds = probe.multislice(scan = grid_scan, potential = potential).diffraction_patterns(max_angle=detector_angle).reduce_ensemble().compute(progress_bar=pbar)
     # print(f"cbeds.axes_metadata = {cbeds.axes_metadata}")
 
     if return_pacbed:
@@ -187,4 +188,4 @@ def simulate_cbed(thickness, tilt_x, tilt_y, params_abtem=None, device_simu='cpu
     if device_simu == 'gpu':
         measurement = measurement.get()
     
-    return measurement
+    return normalize(measurement) # return the measurement normalized to [0, 1] range

@@ -226,3 +226,6 @@ def time_sync():
     # Measure the time
     t = perf_counter()
     return t
+
+def normalize(img):
+    return (img-np.min(img))/(np.max(img) - np.min(img))
