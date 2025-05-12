@@ -13,7 +13,7 @@ This package uses abTEM to simulate PACBEDs, which are used as input images duri
 conda env create -f environment_bott_general.yml
 ```
 
-Alternatively, you can also manually specify the packages for more flexibility:
+Alternatively, you can also manually specify the packages for more flexibility (If your system does not have an nvidia GPU, remove these keywords(`cupy`, `pytorch-cuda=12.1`) from the following):
 ```bash
 conda create -n bott python=3.11 pytorch=2.1.0 pytorch-cuda=12.1 botorch=0.13 cupy abtem gpytorch matplotlib tifffile ipykernel -c nvidia -c pytorch -c conda-forge
 ```
