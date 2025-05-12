@@ -125,7 +125,7 @@ def simulate_cbed(thickness, tilt_x, tilt_y, params_abtem=None, device_simu='cpu
         import cupy as xp
         abtem.config.set({"dask.chunk-size-gpu" : "2048 MB"})
         dask.config.set({"num_workers": 1})
-    elif device_simu == 'cpu':
+    elif device_simu == 'cpu' or device_simu == 'mps':
         import numpy as xp
     else:
         raise ValueError(f"device_simu '{device_simu}' not implemented yet, please use 'cpu', or 'gpu'!")
