@@ -1,6 +1,6 @@
 # Put the forward methods (like f(tilt, thickness) = PACBED)
 # We may turn this into a class if we have other physics models
-from bott.utils import get_default_abtem_params
+from bott.utils import get_default_abtem_params, normalize
 
 
 def simulate_potential(thickness, params_abtem=None, device_simu='cpu'):
