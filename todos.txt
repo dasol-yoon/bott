@@ -1,3 +1,6 @@
-format guide: [queued date / content]
+format guide: [queued date / content / (completed date)]
 
 2025/05/12: physics_models.py -> max angle set to cutoff. Either set a guideline or offer a cropping option.
+
+2025/05/12: ensure the given ground truth is normalized the same as the simulation.
+
