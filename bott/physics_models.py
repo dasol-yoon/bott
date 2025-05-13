@@ -188,4 +188,4 @@ def simulate_cbed(thickness, tilt_x, tilt_y, params_abtem=None, device_simu='cpu
     if device_simu == 'gpu':
         measurement = measurement.get()
     
-    return normalize(measurement) # return the measurement normalized to [0, 1] range
+    return measurement
