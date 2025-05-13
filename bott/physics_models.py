@@ -110,7 +110,7 @@ def simulate_cbed(thickness, tilt_x, tilt_y, params_abtem=None, device_simu='cpu
     return_pacbed = params_abtem["return_pacbed"]
 
     try: #may adjust this in the future
-        if params_abTEM['maxangle']:
+        if params_abtem['detector_angle']:
             detector_angle = params_abtem["detector_angle"]
     except KeyError:
         detector_angle = 'cutoff'
