@@ -19,22 +19,25 @@ from bott.utils import make_output_filenm, normalize
 
 class OptimizationProblem(SyntheticTestFunction):
     """ Problem Class for Hyperparameter Optimization. """
-    
+    #default arguments
     def __init__(self, ground_truth: Tensor, 
                  output_path='./output', 
                  save_results=True, 
-                 reduction_params: dict={'reduction_type':'square', 'reduction_kwargs':{'num_tiles':2}},
+                 reduction_params: dict={'reduction_type':'square', 
+                                         'reduction_kwargs':{'num_tiles':2}},
                  loss_params: dict={'loss_type': 'SSE'}, 
                  norm_arr = False,
                  dim = 3, 
                  bounds = [(5,300), (-20, 20), (-20, 20)],
                  noise_std = None,
                  dtype = torch.float64, 
-                 device='cuda') -> None: # noise_std somehow has no effect when it's < 1, very weird
+                 device='cuda',
+                 params_abtem=None) -> None: # noise_std somehow has no effect when it's < 1, very weird
         self.dtype = dtype
         self.device = device
         self.norm_arr = norm_arr
-        
+        self.params_abtem = params_abtem
+
         self.dim = dim
         self._bounds = bounds
         super(OptimizationProblem, self).__init__(noise_std=noise_std, negate=False, bounds=self._bounds) # This has no effect unless specifically called as `get_objective(X, noisy_objective=True)`
@@ -62,11 +65,14 @@ class OptimizationProblem(SyntheticTestFunction):
     def get_reduction_true(self):
         return self.reduction_func(self.get_measurement_true())
     
-    def get_physics_simu(self, *params, device=None, params_abtem=None):
-        device_simu = self.device if device is None else device
+    def get_physics_simu(self, *params, device_alt=None, params_abtem_alt=None): 
+        #allows alternative parameters different from the initial ones for testing
+        device_simu = self.device if device_alt is None else device_alt
         device_simu = 'gpu' if device_simu == 'cuda' else 'cpu'
+        param_simu_abtem = self.params_abtem if params_abtem_alt is None else params_abtem_alt
+        
         simulation = self.physics_model(*params, device_simu=device_simu, 
-                                        params_abtem=params_abtem)
+                                        params_abtem=param_simu_abtem)
         if self.norm_arr:
             return normalize(simulation) #[0,1]
         else:

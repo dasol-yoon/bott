@@ -7,6 +7,7 @@ from botorch.exceptions import InputDataWarning
 from bott.optimization import parse, run_one_trial
 from bott.physics_models import simulate_cbed
 from bott.problem import OptimizationProblem
+from scipy import ndimage
 
 logging.basicConfig(level=logging.INFO,  # Adjust log level as needed (DEBUG, INFO, etc.)
                     format='%(asctime)s - %(levelname)s - %(message)s')
@@ -23,7 +24,7 @@ def main(
         trial: int,
         algo: str,
         num_iter: int,
-        param_truth: list[float]
+        param_truth: str | list[float]
 ) -> None: 
         """Run one replication for the dropwave function network test problem
 

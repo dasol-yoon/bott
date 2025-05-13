@@ -262,7 +262,7 @@ def run_one_trial(
                     "random": random.getstate(),
                 },
             }
-        torch.save(BO_results, results_dir + f"trial_{trial}.pt")
+        torch.save(BO_results, results_dir + f"trial_{trial}.pt") #save after each iteration in case of interruption
     logger.info(f"\nTotal run time with '{max_iter}' iters: {time_sync() - time_init_start:.3f} sec")
 
 def get_new_sample(model,algo, problem,best_val,objective, device='cpu', dtype=torch.double):

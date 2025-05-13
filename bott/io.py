@@ -2,6 +2,8 @@
 # Exp PACBED, cif, params files
 
 import os
+import numpy as np
+from PIL import Image
 
 def load_tif(file_path, verbose=False):
     from tifffile import imread
@@ -16,8 +18,21 @@ def load_tif(file_path, verbose=False):
         print("Imported .tif data shape =", data.shape)
     return data
 
+def load_img(file_path, verbose=False):
+    #load rgb images like png
+
+    # Check if the file exists
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"The specified file '{file_path}' does not exist.")
+    
+    with Image.open(file_path) as im:
+        data = np.array(im.convert('L')) # convert to grayscale
+    if verbose:
+        print("Success! Loaded .img file path =", file_path)
+        print("Imported .img data shape =", data.size)
+    return data
+
 def load_npy(file_path, verbose=False):
-    import numpy as np
 
     # Check if the file exists
     if not os.path.exists(file_path):
