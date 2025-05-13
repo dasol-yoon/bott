@@ -62,10 +62,11 @@ class OptimizationProblem(SyntheticTestFunction):
     def get_reduction_true(self):
         return self.reduction_func(self.get_measurement_true())
     
-    def get_physics_simu(self, *params, device=None):
+    def get_physics_simu(self, *params, device=None, params_abtem=None):
         device_simu = self.device if device is None else device
         device_simu = 'gpu' if device_simu == 'cuda' else 'cpu'
-        simulation = self.physics_model(*params, device_simu=device_simu)
+        simulation = self.physics_model(*params, device_simu=device_simu, 
+                                        params_abtem=params_abtem)
         if self.norm_arr:
             return normalize(simulation) #[0,1]
         else:

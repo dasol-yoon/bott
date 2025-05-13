@@ -229,4 +229,7 @@ def time_sync():
     return t
 
 def normalize(img):
-    return (img-np.min(img))/(np.max(img) - np.min(img))
+    if type(img)==torch.Tensor:
+        return (img-torch.min(img))/(torch.max(img) - torch.min(img))
+    else:
+        return (img-np.min(img))/(np.max(img) - np.min(img))
