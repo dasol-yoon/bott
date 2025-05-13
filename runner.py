@@ -68,5 +68,6 @@ def main(
 
 
 if __name__ == "__main__":
+    #Only run the following block if this file is executed directly — not when it's imported.
     args = parse()
     main(**vars(args))

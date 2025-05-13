@@ -322,6 +322,21 @@ def parse():
     )
     parser.add_argument("--trial", "-t", type=int, default=0)
     parser.add_argument("--algo", "-a", type=str, default="EI")
-    parser.add_argument('--param_truth', "-p", type=float, nargs=3, required=True, help='Three param truth values')
     parser.add_argument("--num_iter", "-n", type=int, default=50)
-    return parser.parse_args()
+    
+    grp = parser.add_mutually_exclusive_group(required=True)
+    grp.add_argument('--param_truth', "-p", type=float, nargs=3, help='Three param truth values')
+    grp.add_argument('--param_truth_path', "-p", type=str, help='path to the ground truth image')
+    
+    args = parser.parse_args()
+
+    # Combine into a single param_truth field
+    if args.param_truth is not None:
+        args.param_truth = args.param_truth  # already a list of floats
+    else:
+        args.param_truth = args.param_truth_path  # assign string to param_truth
+
+    # Remove the secondary variable so main() only sees 'param_truth'
+    delattr(args, 'param_truth_path')
+
+    return args
