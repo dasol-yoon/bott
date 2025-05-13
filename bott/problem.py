@@ -14,7 +14,7 @@ from bott.io import load_tif
 from bott.loss import LossFunction
 from bott.physics_models import simulate_cbed
 from bott.reduction import ReductionFunction
-from bott.utils import make_output_filenm
+from bott.utils import make_output_filenm, normalize
 
 
 class OptimizationProblem(SyntheticTestFunction):
@@ -55,7 +55,7 @@ class OptimizationProblem(SyntheticTestFunction):
     def get_measurement_true(self):
         # Write it as a method so we can preprocess them in the future, like normalization, resampling and such
         if self.norm_arr:
-            return self.ground_truth / self.ground_truth.max()
+            return normalize(self.ground_truth) #[0,1]
         else:
             return self.ground_truth
     
@@ -67,7 +67,7 @@ class OptimizationProblem(SyntheticTestFunction):
         device_simu = 'gpu' if device_simu == 'cuda' else 'cpu'
         simulation = self.physics_model(*params, device_simu=device_simu)
         if self.norm_arr:
-            return simulation / simulation.max()
+            return normalize(simulation) #[0,1]
         else:
             return simulation
     
