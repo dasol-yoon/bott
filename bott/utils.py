@@ -91,6 +91,7 @@ def get_default_abtem_params():
         "convergence_angle": 19.1,  # mrad
         "df": 0,
         "aberrations": {},
+        "detector_angle":'cutoff',
 
         # Scan parameters
         "scan_step_size": 0.3,  # nm
