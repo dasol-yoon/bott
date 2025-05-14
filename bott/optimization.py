@@ -326,7 +326,7 @@ def parse():
     
     grp = parser.add_mutually_exclusive_group(required=True)
     grp.add_argument('--param_truth', "-p", type=float, nargs=3, help='Three param truth values')
-    grp.add_argument('--param_truth_path', "-p", type=str, help='path to the ground truth image')
+    grp.add_argument('--param_truth_path', "-f", type=str, help='path to the ground truth image')
     
     args = parser.parse_args()
 
