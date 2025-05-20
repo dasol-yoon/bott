@@ -188,7 +188,7 @@ def run_one_trial(
         # Run physical model with a new_x
         input_param = new_x.tolist()[0] # [value0, value1, value2]
         time_simu_start = time_sync()
-        image_temp = torch.from_numpy(problem.get_physics_simu(*input_param)).to(dtype=dtype, device=device)
+        image_temp = torch.from_numpy(problem.get_physics_simu(*input_param,device_alt=problem.device)).to(dtype=dtype, device=device)
         time_simu_end = time_sync()
         physics_model_runtime.append(time_simu_end-time_simu_start)
         # image_output = torch.cat((image_output, image_temp.unsqueeze(0)),dim=0) # This will continue to concat new images but image_output is never used. We should remove this unless it's needed somewhere else.
