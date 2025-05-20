@@ -67,8 +67,20 @@ class OptimizationProblem(SyntheticTestFunction):
     
     def get_physics_simu(self, *params, device_alt=None, params_abtem_alt=None): 
         #allows alternative parameters different from the initial ones for testing
-        device_simu = self.device if device_alt is None else device_alt
-        device_simu = 'gpu' if device_simu == 'cuda' else 'cpu'
+        # device_simu = self.device if device_alt is None else device_alt
+        # device_simu = 'gpu' if device_simu == 'cuda' else 'cpu'
+        if device_alt is not None:
+            device_simu = device_alt #logger.info(f'case1')
+        else:
+            device_simu = self.device #logger.info(f'case2')
+            
+        device_simu = device_simu if isinstance(device_simu, str) else device_simu.type
+
+        if device_simu in ['cuda','gpu']:
+            device_simu = 'gpu'
+        else:
+            device_simu = 'cpu'
+
         param_simu_abtem = self.params_abtem if params_abtem_alt is None else params_abtem_alt
         
         simulation = self.physics_model(*params, device_simu=device_simu, 
