@@ -1,6 +1,6 @@
 #!/bin/sh
 
-for trial in $(seq 23 1 23)
+for trial in $(seq 50 1 50)
 do
     for algo in KG
     do
