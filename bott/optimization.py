@@ -76,6 +76,7 @@ def run_one_trial(
     loss_func = problem.loss_func
     reduction_true = problem.reduction_true.to(device)
     measurement_true = problem.measurement_true.to(device)
+    params_abTEM = problem.params_abtem
 
     if objective is None:
         # objective = GenericMCObjective(lambda Y, X=None: ((Y[...,:-1]-problem.reduction_true.to(device)).pow(2)+Y[...,[-1]]).sum(dim=-1)) #TODO: The sum dimension is still a bit unclear
@@ -129,7 +130,7 @@ def run_one_trial(
 
         # Physical images output 
         input_params = X.tolist()
-        outputs_np = np.array([problem.get_physics_simu(*param) for param in input_params])
+        outputs_np = np.array([problem.get_physics_simu(*param,params_abtem_alt=params_abTEM,device_alt=problem.device) for param in input_params])
         image_output = torch.tensor(outputs_np, dtype=dtype, device=device)
         logger.info(f"image output shape {image_output.shape}")
         # if noisy: # TODO The noise on PACBED is better described by Poisson
@@ -188,7 +189,7 @@ def run_one_trial(
         # Run physical model with a new_x
         input_param = new_x.tolist()[0] # [value0, value1, value2]
         time_simu_start = time_sync()
-        image_temp = torch.from_numpy(problem.get_physics_simu(*input_param,device_alt=problem.device)).to(dtype=dtype, device=device)
+        image_temp = torch.from_numpy(problem.get_physics_simu(*input_param,params_abtem_alt=params_abTEM,device_alt=problem.device)).to(dtype=dtype, device=device)
         time_simu_end = time_sync()
         physics_model_runtime.append(time_simu_end-time_simu_start)
         # image_output = torch.cat((image_output, image_temp.unsqueeze(0)),dim=0) # This will continue to concat new images but image_output is never used. We should remove this unless it's needed somewhere else.
