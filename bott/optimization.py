@@ -126,7 +126,7 @@ def run_one_trial(
         random.seed(trial)
 
         # random initial points and calculate intermediate outputs [cbed]
-        X=draw_sobol_samples(bounds=problem.bounds.to(device=device),n=n_init_evals,q=1).squeeze(-2) # X = [n_init, problem.dim], note that X is by default on cpu because problem.bounds is also on cpu
+        X=draw_sobol_samples(bounds=problem.bounds.to(device=device),n=n_init_evals,q=1).squeeze(-2).to(dtype=dtype) # X = [n_init, problem.dim], note that X is by default on cpu because problem.bounds is also on cpu
 
         # Physical images output 
         input_params = X.tolist()
