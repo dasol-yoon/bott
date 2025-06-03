@@ -75,4 +75,4 @@ def safe_power(arr, power, eps=1e-6):
     '''
     Raise the power of measurement in a numerically safe way
     '''
-    return (arr+eps).pow(power)
+    return (arr.abs()+eps).pow(power)
