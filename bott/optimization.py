@@ -80,8 +80,9 @@ def run_one_trial(
 
     if objective is None:
         # objective = GenericMCObjective(lambda Y, X=None: ((Y[...,:-1]-problem.reduction_true.to(device)).pow(2)+Y[...,[-1]]).sum(dim=-1)) #TODO: The sum dimension is still a bit unclear
-        objective = GenericMCObjective(lambda Y, X=None: -1*(loss_func(Y[...,:-1], reduction_true,reduce=True) + Y[...,-1])) # should return sample_shape x batch_size x q 
-    
+        objective = GenericMCObjective(lambda Y, X=None: -1*problem.scaling_factor*(loss_func(Y[...,:-1], reduction_true,reduce=True) + Y[...,-1])) # should return sample_shape x batch_size x q 
+        logger.info(f'Using {problem.scaling_factor} as scaling factor for the objective')
+
     # check if we have run the experiment. If yes, load the previous result and continue. Otherwise, start from the beginning.
     if os.path.exists(results_dir + f"trial_{trial}.pt") and not force_restart:
         logger.info(
@@ -141,8 +142,11 @@ def run_one_trial(
 
         # calculate reduction intermediate outputs for EICF in batch
         if algo=='EICF':
+            logger.info(image_output.shape)
             y_reduction = problem.reduction_func(image_output).to(device)  # [n_init, num_tiles]
-            reductionLoss = loss_func(y_simu=y_reduction, y_true=reduction_true, reduce=False).unsqueeze(-1) # [n_init, 1]
+            reductionLoss = problem.scaling_factor* loss_func(y_simu=y_reduction,
+                                                              y_true=reduction_true,
+                                                              reduce=False).unsqueeze(-1) # [n_init, 1]
             epsilon = pixelLoss - reductionLoss
             y_value = torch.cat((y_reduction,epsilon),dim=-1) # [n_init, num_tiles+1]
             
@@ -201,7 +205,9 @@ def run_one_trial(
         # calculate reduction intermediate outputs for EICF
         if algo=='EICF':
             y_reduction = problem.reduction_func(image_temp).to(device) # [num_tiles,]
-            reductionLoss = loss_func(y_simu=y_reduction.unsqueeze(0),y_true=reduction_true,reduce=False).unsqueeze(0) # [1,]
+            reductionLoss = problem.scaling_factor*loss_func(y_simu=y_reduction.unsqueeze(0),
+                                                             y_true=reduction_true,
+                                                             reduce=False).unsqueeze(0) # [1,]
             epsilon = pixelLoss[-1] - reductionLoss
             y_temp = torch.cat((y_reduction.unsqueeze(0),epsilon),dim=-1) # [1,num_tiles+1]
             logger.info(f"y_temp {y_temp}")
@@ -328,6 +334,8 @@ def parse():
     grp = parser.add_mutually_exclusive_group(required=True)
     grp.add_argument('--param_truth', "-p", type=float, nargs=3, help='Three param truth values')
     grp.add_argument('--param_truth_path', "-f", type=str, help='path to the ground truth image')
+
+    parser.add_argument('--nt',type=int,default=1) #20250603 temporary edit
     
     args = parser.parse_args()
 
