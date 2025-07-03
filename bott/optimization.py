@@ -80,7 +80,7 @@ def run_one_trial(
 
     if objective is None:
         # objective = GenericMCObjective(lambda Y, X=None: ((Y[...,:-1]-problem.reduction_true.to(device)).pow(2)+Y[...,[-1]]).sum(dim=-1)) #TODO: The sum dimension is still a bit unclear
-        objective = GenericMCObjective(lambda Y, X=None: -1*problem.scaling_factor*(loss_func(Y[...,:-1], reduction_true,reduce=True) + Y[...,-1])) # should return sample_shape x batch_size x q 
+        objective = GenericMCObjective(lambda Y, X=None: -1*(problem.scaling_factor*loss_func(Y[...,:-1], reduction_true,reduce=True) + Y[...,-1])) # should return sample_shape x batch_size x q 
         logger.info(f'Using {problem.scaling_factor} as scaling factor for the objective')
 
     # check if we have run the experiment. If yes, load the previous result and continue. Otherwise, start from the beginning.
