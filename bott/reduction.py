@@ -1,5 +1,7 @@
 import torch
+
 from bott.utils import create_circular_mask
+
 
 class ReductionFunction(torch.nn.Module):
 
@@ -203,25 +205,29 @@ def get_square_tiles(
     for i in range(num_tiles):
         h_start = i * h_tile_width
         h_end = h_start + h_tile_width
-        
+        if i == num_tiles-1:
+            h_end = h_size
         for j in range(num_tiles):
             w_start = j * w_tile_width
             w_end = w_start + w_tile_width
-            
+            if j == num_tiles-1:
+                w_end = w_size
             slicer = [slice(None)] * measurement.ndim
             slicer[h_dim] = slice(h_start, h_end)
             slicer[w_dim] = slice(w_start, w_end)
-            
             tile = measurement[tuple(slicer)]
             tiles.append(tile)
     
     # Stack tiles along a new first dimension
-    tiles = torch.stack(tiles, dim=-3).to(dtype=measurement.dtype, device=measurement.device) # [batch, tile_n, reduce_H, reduce_W]
-    
+    # tiles = torch.stack(tiles, dim=-3).to(dtype=measurement.dtype, device=measurement.device) # [batch, tile_n, reduce_H, reduce_W]
     if reduce == 'mean':
-        return tiles.mean(dim=(-2,-1))
+        tile_mean = [t.mean() for t in tiles] # TODO include / exclude scaling factor
+        tile_mean = torch.stack(tile_mean).to(dtype=measurement.dtype, device=measurement.device)
+        return tile_mean
     elif reduce == 'sum':
-        return tiles.sum(dim=(-2,-1))
+        tile_sum = [t.sum() for t in tiles]
+        tile_sum = torch.stack(tile_sum).to(dtype=measurement.dtype, device=measurement.device)
+        return tile_sum
     elif reduce in (False, None):
         return tiles
     else:
