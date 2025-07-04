@@ -142,7 +142,6 @@ def run_one_trial(
 
         # calculate reduction intermediate outputs for EICF in batch
         if algo=='EICF':
-            logger.info(image_output.shape)
             y_reduction = problem.reduction_func(image_output).to(device)  # [n_init, num_tiles]
             reductionLoss = problem.scaling_factor* loss_func(y_simu=y_reduction,
                                                               y_true=reduction_true,

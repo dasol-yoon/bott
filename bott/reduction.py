@@ -215,18 +215,18 @@ def get_square_tiles(
             slicer = [slice(None)] * measurement.ndim
             slicer[h_dim] = slice(h_start, h_end)
             slicer[w_dim] = slice(w_start, w_end)
-            tile = measurement[tuple(slicer)]
+            tile = measurement[tuple(slicer)] #  [N measurements, height, width] but if N=1, [h, w]
             tiles.append(tile) #list
 
     # Stack tiles along a new first dimension
     # tiles = torch.stack(tiles, dim=-3).to(dtype=measurement.dtype, device=measurement.device) # [batch, tile_n, reduce_H, reduce_W]
     if reduce == 'mean':
-        tile_mean = [t.mean() for t in tiles] # TODO include / exclude scaling factor
-        tile_mean = torch.stack(tile_mean).to(dtype=measurement.dtype, device=measurement.device)
+        tile_mean = [t.mean(dim=(-2,-1)) for t in tiles] # TODO include / exclude scaling factor
+        tile_mean = torch.stack(tile_mean,dim=-1).to(dtype=measurement.dtype, device=measurement.device)
         return tile_mean
     elif reduce == 'sum':
-        tile_sum = [t.sum() for t in tiles]
-        tile_sum = torch.stack(tile_sum).to(dtype=measurement.dtype, device=measurement.device)
+        tile_sum = [t.sum(dim=(-2,-1)) for t in tiles] #dim -2 -1 needed for initial evaluation with N>1
+        tile_sum = torch.stack(tile_sum,dim=-1).to(dtype=measurement.dtype, device=measurement.device)
         return tile_sum
     elif reduce in (False, None):
         return tiles #torch.stack(tiles) #torch.Tensor expects same size
