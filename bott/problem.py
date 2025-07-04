@@ -71,7 +71,7 @@ class OptimizationProblem(SyntheticTestFunction):
         temp_reduction_func = ReductionFunction(rp) # update the reduction function with the new
         tiles = temp_reduction_func(self.get_measurement_true())
         del rp['reduction_kwargs']['reduce'] # remove the reduce argument, so it doesn't affect the next call
-        dim = tiles.shape
+        dim = tiles[0].shape #temporary fix for list type tiles
         return dim[-1]*dim[-2] #tile height * tile width, number of pixels in each tile
     
     def get_physics_simu(self, *params, device_alt=None, params_abtem_alt=None): 

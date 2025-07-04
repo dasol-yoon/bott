@@ -216,8 +216,8 @@ def get_square_tiles(
             slicer[h_dim] = slice(h_start, h_end)
             slicer[w_dim] = slice(w_start, w_end)
             tile = measurement[tuple(slicer)]
-            tiles.append(tile)
-    
+            tiles.append(tile) #list
+
     # Stack tiles along a new first dimension
     # tiles = torch.stack(tiles, dim=-3).to(dtype=measurement.dtype, device=measurement.device) # [batch, tile_n, reduce_H, reduce_W]
     if reduce == 'mean':
@@ -229,6 +229,6 @@ def get_square_tiles(
         tile_sum = torch.stack(tile_sum).to(dtype=measurement.dtype, device=measurement.device)
         return tile_sum
     elif reduce in (False, None):
-        return tiles
+        return tiles #torch.stack(tiles) #torch.Tensor expects same size
     else:
         raise ValueError(f"The current implementation does not support reduce = '{reduce}', please use either 'mean', 'sum', or 'False'") 
