@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## 2025.08.15
+- Fully clean up `gradient_descent_and_pytorch_multislice.ipynb`. GDTT is working as expected now. 
+- Add `gradient.py` module for all relevant functions and classes for GDTT
+
 ## 2025.05.06
 - Refine and correct the orientation of potential, probe position, CBED, and tilts of `gradient_descent_and_pytorch_multislice.ipynb`.
 
