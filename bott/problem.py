@@ -54,7 +54,8 @@ class OptimizationProblem(SyntheticTestFunction):
         self.reduction_true = self.get_reduction_true()
         self.scaling_factor = self.get_scaling_factor(reduction_params)
         self.physics_model = simulate_cbed
-        self.num_tiles = reduction_params['reduction_kwargs']['num_tiles']
+        if reduction_params['reduction_type'] == 'square': #20250828
+            self.num_tiles = reduction_params['reduction_kwargs']['num_tiles']
 
     def get_measurement_true(self):
         # Write it as a method so we can preprocess them in the future, like normalization, resampling and such

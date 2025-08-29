@@ -30,8 +30,9 @@ from botorch.utils.sampling import draw_sobol_samples
 from gpytorch.mlls import ExactMarginalLogLikelihood
 
 from bott.ts_acqf import ThompsonSampling
-from bott.utils import time_sync
+from bott.utils import time_sync, make_output_filenm
 
+from PIL import Image #20250520
 
 def run_one_trial(
         problem_name: str,
@@ -69,7 +70,9 @@ def run_one_trial(
     device = torch.device(device_botorch)
     current_directory = os.getcwd()
     results_dir = f"{current_directory}/results/{problem_name}/{algo}/"
+    image_dir = f"{current_directory}/results/{problem_name}/images/" #20250520
     os.makedirs(results_dir, exist_ok=True)
+    os.makedirs(image_dir, exist_ok=True) #20250520
     logging.basicConfig(level=logging.INFO,  # Adjust log level as needed (DEBUG, INFO, etc.)
                     format='%(asctime)s - %(levelname)s - %(message)s')
     logger = logging.getLogger(__name__)  # Get a logger for the current module
@@ -196,7 +199,9 @@ def run_one_trial(
         time_simu_end = time_sync()
         physics_model_runtime.append(time_simu_end-time_simu_start)
         # image_output = torch.cat((image_output, image_temp.unsqueeze(0)),dim=0) # This will continue to concat new images but image_output is never used. We should remove this unless it's needed somewhere else.
-        
+        image_t = Image.fromarray(image_temp.cpu().numpy()) #20250520
+        image_t.save(image_dir+make_output_filenm(input_param)) #20250520
+
         # calculate final objective (Loss)
         new_Loss = loss_func(y_simu=image_temp.unsqueeze(0),y_true=measurement_true,reduce=False).unsqueeze(-1) # [1,1]
         pixelLoss = torch.cat((pixelLoss, new_Loss), dim=0)
@@ -204,6 +209,9 @@ def run_one_trial(
         # calculate reduction intermediate outputs for EICF
         if algo=='EICF':
             y_reduction = problem.reduction_func(image_temp).to(device) # [num_tiles,]
+            logger.info(f'y_reduction {y_reduction.shape}') #20250828
+            logger.info(f'y_reduction.unsqueeze(0) {y_reduction.unsqueeze(0).shape}') #20250828
+            logger.info(f'reduction_true {reduction_true.shape}') #20250828
             reductionLoss = problem.scaling_factor*loss_func(y_simu=y_reduction.unsqueeze(0),
                                                              y_true=reduction_true,
                                                              reduce=False).unsqueeze(0) # [1,]

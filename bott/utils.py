@@ -43,7 +43,7 @@ def create_circular_mask(
     return mask
 
 def make_output_filenm(X):
-    X = X.tolist()
+    #X = X.tolist() #20250520 uncommented
     thickness = str(round(X[0])).zfill(4)
     tilt_x = str(round(X[1]))
     tilt_y = str(round(X[2]))
