@@ -42,6 +42,37 @@ def create_circular_mask(
     
     return mask
 
+
+def quadrant_masks_from_inv(inv_mask: torch.Tensor):
+    """
+    Given a 2D boolean mask where True = outside circle (H, W),
+    return four 2D boolean masks (TL, TR, BL, BR) restricted to inv_mask.
+
+    Tie-break:
+      - Left:  x < W//2, Right: x >= W//2
+      - Top:   y < H//2, Bottom: y >= H//2
+    """
+    H, W = inv_mask.shape
+    device = inv_mask.device
+
+    # y: rows, x: cols
+    y, x = torch.meshgrid(
+        torch.arange(H, device=device),
+        torch.arange(W, device=device),
+        indexing='ij'
+    )
+
+    left   = x <  (W // 2)
+    right  = x >= (W // 2)
+    top    = y <  (H // 2)
+    bottom = y >= (H // 2)
+
+    tl = inv_mask & top    & left
+    tr = inv_mask & top    & right
+    bl = inv_mask & bottom & left
+    br = inv_mask & bottom & right
+    return tl, tr, bl, br
+
 def make_output_filenm(X):
     #X = X.tolist() #20250520 uncommented
     thickness = str(round(X[0])).zfill(4)
