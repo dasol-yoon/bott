@@ -150,7 +150,7 @@ def run_one_trial(
                                         y_true=reduction_true * problem.scaling_factor,
                                         reduce=False).unsqueeze(-1) # [n_init, 1]
             #epsilon = pixelLoss - reductionLoss
-            epsilon = safe_division(pixelLoss, reductionLoss)
+            epsilon = torch.Tensor(safe_division(pixelLoss, reductionLoss))
             y_value = torch.cat((y_reduction,epsilon),dim=-1) # [n_init, num_tiles+1]
             
         obj = -1*pixelLoss # maximization direction
@@ -215,6 +215,7 @@ def run_one_trial(
                                     reduce=False).unsqueeze(0) # [1,]
             
             # epsilon = pixelLoss[-1] - reductionLoss #20250903
+            epsilon = torch.Tensor(safe_division(pixelLoss[-1], reductionLoss))
             y_temp = torch.cat((y_reduction.unsqueeze(0),epsilon),dim=-1) # [1,num_tiles+1]
             logger.info(f"y_temp {y_temp}")
             y_value = torch.cat((y_value,y_temp),dim=0)

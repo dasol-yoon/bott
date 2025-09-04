@@ -271,6 +271,20 @@ def safe_division(dividend, divisor,threshold=0.2, high_value=200):
 
     If |divisor| < threshold, return high_value instead of dividing.
     """
+    # Convert torch tensors to numpy
+    if isinstance(dividend, torch.Tensor):
+        dividend = dividend.detach().cpu().numpy()
+    if isinstance(divisor, torch.Tensor):
+        divisor = divisor.detach().cpu().numpy()
+    
+    # Treat scalars and single-element arrays as scalars
+    if np.isscalar(dividend) or np.size(dividend) == 1:
+        dividend = np.asarray(dividend).item()
+        divisor = np.asarray(divisor).item()
+        if abs(divisor) < threshold:
+            return high_value
+        return np.array( [[dividend / divisor]] )
+
     quotient = np.empty_like(dividend, dtype=float)
     mask = np.abs(divisor) >= threshold
     quotient[mask] = dividend[mask] / divisor[mask]

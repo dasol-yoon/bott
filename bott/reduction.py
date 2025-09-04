@@ -300,9 +300,9 @@ def get_domain_tiles(
     
     # Note that the last dimension is the center/periphery dimension
     if reduce == 'mean':
-        return tiles.sum(dim=(-2,-1)) / tiles.count_nonzero(dim=(-2,-1))
+        return (tiles.sum(dim=(-2,-1)) / tiles.count_nonzero(dim=(-2,-1)) ).squeeze() #20250828 quick fix:suqeeze
     elif reduce == 'sum':
-        return tiles.sum(dim=(-2,-1))
+        return (tiles.sum(dim=(-2,-1)) ).squeeze() #20250828 quick fix:suqeeze
     elif reduce in (False, None):
         return tiles
     else:
