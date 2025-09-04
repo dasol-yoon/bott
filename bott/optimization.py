@@ -30,7 +30,7 @@ from botorch.utils.sampling import draw_sobol_samples
 from gpytorch.mlls import ExactMarginalLogLikelihood
 
 from bott.ts_acqf import ThompsonSampling
-from bott.utils import time_sync, make_output_filenm
+from bott.utils import time_sync, make_output_filenm, safe_division
 
 from PIL import Image #20250520
 
@@ -146,10 +146,11 @@ def run_one_trial(
         # calculate reduction intermediate outputs for EICF in batch
         if algo=='EICF':
             y_reduction = problem.reduction_func(image_output).to(device)  # [n_init, num_tiles]
-            reductionLoss = problem.scaling_factor* loss_func(y_simu=y_reduction,
-                                                              y_true=reduction_true,
-                                                              reduce=False).unsqueeze(-1) # [n_init, 1]
-            epsilon = pixelLoss - reductionLoss
+            reductionLoss = loss_func(y_simu=y_reduction * problem.scaling_factor,
+                                        y_true=reduction_true * problem.scaling_factor,
+                                        reduce=False).unsqueeze(-1) # [n_init, 1]
+            #epsilon = pixelLoss - reductionLoss
+            epsilon = safe_division(pixelLoss, reductionLoss)
             y_value = torch.cat((y_reduction,epsilon),dim=-1) # [n_init, num_tiles+1]
             
         obj = -1*pixelLoss # maximization direction
