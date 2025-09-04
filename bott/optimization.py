@@ -83,7 +83,9 @@ def run_one_trial(
 
     if objective is None:
         # objective = GenericMCObjective(lambda Y, X=None: ((Y[...,:-1]-problem.reduction_true.to(device)).pow(2)+Y[...,[-1]]).sum(dim=-1)) #TODO: The sum dimension is still a bit unclear
-        objective = GenericMCObjective(lambda Y, X=None: -1*(problem.scaling_factor*loss_func(Y[...,:-1], reduction_true,reduce=True) + Y[...,-1])) # should return sample_shape x batch_size x q 
+        objective = GenericMCObjective(lambda Y, X=None: -1*(loss_func(Y[...,:-1]*problem.scaling_factor.to(device), 
+                                                                       reduction_true*problem.scaling_factor.to(device),
+                                                                       reduce=True) + Y[...,-1])) # should return sample_shape x batch_size x q 
         logger.info(f'Using {problem.scaling_factor} as scaling factor for the objective')
 
     # check if we have run the experiment. If yes, load the previous result and continue. Otherwise, start from the beginning.
@@ -146,11 +148,11 @@ def run_one_trial(
         # calculate reduction intermediate outputs for EICF in batch
         if algo=='EICF':
             y_reduction = problem.reduction_func(image_output).to(device)  # [n_init, num_tiles]
-            reductionLoss = loss_func(y_simu=y_reduction * problem.scaling_factor,
-                                        y_true=reduction_true * problem.scaling_factor,
+            reductionLoss = loss_func(y_simu=y_reduction * problem.scaling_factor.to(device=device),
+                                        y_true=reduction_true * problem.scaling_factor.to(device=device),
                                         reduce=False).unsqueeze(-1) # [n_init, 1]
             #epsilon = pixelLoss - reductionLoss
-            epsilon = torch.Tensor(safe_division(pixelLoss, reductionLoss))
+            epsilon = torch.Tensor(safe_division(pixelLoss, reductionLoss)).to(device=device)
             y_value = torch.cat((y_reduction,epsilon),dim=-1) # [n_init, num_tiles+1]
             
         obj = -1*pixelLoss # maximization direction
@@ -210,12 +212,12 @@ def run_one_trial(
         # calculate reduction intermediate outputs for EICF
         if algo=='EICF':
             y_reduction = problem.reduction_func(image_temp).to(device) # [num_tiles,]
-            reductionLoss = loss_func(y_simu=y_reduction.unsqueeze(0)*problem.scaling_factor,
-                                    y_true=reduction_true *problem.scaling_factor,
+            reductionLoss = loss_func(y_simu=y_reduction.unsqueeze(0)*problem.scaling_factor.to(device=device),
+                                    y_true=reduction_true *problem.scaling_factor.to(device=device),
                                     reduce=False).unsqueeze(0) # [1,]
             
             # epsilon = pixelLoss[-1] - reductionLoss #20250903
-            epsilon = torch.Tensor(safe_division(pixelLoss[-1], reductionLoss))
+            epsilon = torch.Tensor(safe_division(pixelLoss[-1], reductionLoss)).to(device=device)
             y_temp = torch.cat((y_reduction.unsqueeze(0),epsilon),dim=-1) # [1,num_tiles+1]
             logger.info(f"y_temp {y_temp}")
             y_value = torch.cat((y_value,y_temp),dim=0)

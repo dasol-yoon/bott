@@ -55,7 +55,7 @@ class OptimizationProblem(SyntheticTestFunction):
         self.measurement_true = self.get_measurement_true()
         self.reduction_true = self.get_reduction_true()
         if scale_factor is not None: #20250903
-            self.scaling_factor = scale_factor
+            self.scaling_factor = scale_factor.to(device=self.device)
         else:
             self.scaling_factor = self.get_scaling_factor(reduction_params)
         self.physics_model = simulate_cbed
