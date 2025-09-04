@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## 2025.09.04
+- Allow cutoff angle to be freely specified in `SimuAbTEM`
+- Add thickness trend plotting in `gradient_descent_and_pytorch_multislice.ipynb`
+
 ## 2025.08.15
 - Fully clean up `gradient_descent_and_pytorch_multislice.ipynb`. GDTT is working as expected now. 
 - Add `gradient.py` module for all relevant functions and classes for GDTT

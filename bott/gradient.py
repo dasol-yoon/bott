@@ -693,7 +693,6 @@ class SimuAbTEM:
         tilt_y = self.tilt_y
         aberrations = self.aberrations
         potential = self.potential
-        lateral_sampling = self.lateral_sampling
         
         probe = abtem.Probe(energy=energy, semiangle_cutoff=convergence_angle, defocus=df, tilt=(tilt_x, tilt_y), **aberrations)
         probe.grid.match(potential)
@@ -704,15 +703,25 @@ class SimuAbTEM:
 
         # Useful information
         wavelength = get_EM_constants(energy/1e3, 'wavelength')
-        kmax_antialias = 1/lateral_sampling/3 # 1/Ang #The kmax_antialiasing = 2.675 Ang-1 
-        alpha_max_antialias = wavelength * kmax_antialias # rad
         
         # Saving attributes
+        self.alpha_max_full      = min(probe.full_cutoff_angles) # mrad
+        self.kmax_full           = self.alpha_max_full / wavelength / 1e3 # Ang-1
+        self.alpha_max_antialias = min(probe.cutoff_angles)
+        self.kmax_antialias      = self.alpha_max_antialias / wavelength / 1e3
+        self.alpha_max_valid     = min(probe.rectangle_cutoff_angles)
+        self.kmax_valid          = self.alpha_max_valid / wavelength / 1e3
+        self.alpha_max_final     = abtem.PixelatedDetector(max_angle=self.collection_angle).angular_limits(probe)[-1]
+        self.kmax_final          = self.alpha_max_final / wavelength / 1e3
+        
         self.probe = probe
         
         if self.verbose:
             print(f"Energy = {energy/1e3} kV, rel. wavelength = {wavelength:.4g} Ang")
-            print(f"CBED collection kmax = {kmax_antialias:.4g} 1/Ang, collection alpha_max = {alpha_max_antialias*1000:.4g} mrad")
+            print(f"CBED full collection kmax = {self.kmax_full:.4g} 1/Ang, full collection alpha_max = {self.alpha_max_full:.4g} mrad")
+            print(f"CBED antialias collection kmax = {self.kmax_antialias:.4g} 1/Ang, antialias collection alpha_max = {self.alpha_max_antialias:.4g} mrad")
+            print(f"CBED valid collection kmax = {self.kmax_valid:.4g} 1/Ang, valid collection alpha_max = {self.alpha_max_valid:.4g} mrad")
+            print(f"CBED final collection kmax = {self.kmax_final:.4g} 1/Ang, final collection alpha_max = {self.alpha_max_final:.4g} mrad")
             print(f"probe.shape = {probe.shape}")
             print(f"probe.axes_metadata = {probe.axes_metadata}")
             
@@ -760,7 +769,7 @@ class SimuAbTEM:
         return_pacbed = self.return_pacbed
         xp = self.xp
         
-        cbeds = probe.multislice(scan = pos_ang_xy, potential = potential).diffraction_patterns(max_angle='cutoff').reduce_ensemble().compute().array
+        cbeds = probe.multislice(scan = pos_ang_xy, potential = potential).diffraction_patterns(max_angle=self.collection_angle).reduce_ensemble().compute().array
 
         if return_pacbed and cbeds.ndim == 3:
             measurement_arr = xp.mean(cbeds, axis=(0)) # Reduce the scan axes
