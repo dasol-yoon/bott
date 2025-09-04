@@ -32,7 +32,8 @@ class OptimizationProblem(SyntheticTestFunction):
                  noise_std = None,
                  dtype = torch.float64, 
                  device='cuda',
-                 params_abtem=None) -> None: # noise_std somehow has no effect when it's < 1, very weird
+                 params_abtem=None,
+                 scaling_factor = None) -> None: # noise_std somehow has no effect when it's < 1, very weird
         self.dtype = dtype
         self.device = device
         self.norm_arr = norm_arr
@@ -52,7 +53,10 @@ class OptimizationProblem(SyntheticTestFunction):
         self.ground_truth = ground_truth.to(dtype=self.dtype, device=self.device)
         self.measurement_true = self.get_measurement_true()
         self.reduction_true = self.get_reduction_true()
-        self.scaling_factor = self.get_scaling_factor(reduction_params)
+        if scaling_factor is not None: #20250902
+            self.scaling_factor = scaling_factor
+        else:
+            self.scaling_factor = self.get_scaling_factor(reduction_params)
         self.physics_model = simulate_cbed
         if reduction_params['reduction_type'] == 'square': #20250828
             self.num_tiles = reduction_params['reduction_kwargs']['num_tiles']
