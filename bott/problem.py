@@ -15,6 +15,7 @@ from bott.loss import LossFunction
 from bott.physics_models import simulate_cbed
 from bott.reduction import ReductionFunction
 from bott.utils import make_output_filenm, normalize
+import numpy as np
 
 
 class OptimizationProblem(SyntheticTestFunction):
@@ -32,7 +33,8 @@ class OptimizationProblem(SyntheticTestFunction):
                  noise_std = None,
                  dtype = torch.float64, 
                  device='cuda',
-                 params_abtem=None) -> None: # noise_std somehow has no effect when it's < 1, very weird
+                 params_abtem=None,
+                 scale_factor = None) -> None: # noise_std somehow has no effect when it's < 1, very weird
         self.dtype = dtype
         self.device = device
         self.norm_arr = norm_arr
@@ -52,7 +54,10 @@ class OptimizationProblem(SyntheticTestFunction):
         self.ground_truth = ground_truth.to(dtype=self.dtype, device=self.device)
         self.measurement_true = self.get_measurement_true()
         self.reduction_true = self.get_reduction_true()
-        self.scaling_factor = self.get_scaling_factor(reduction_params)
+        if scale_factor is not None: #20250903
+            self.scaling_factor = scale_factor
+        else:
+            self.scaling_factor = self.get_scaling_factor(reduction_params)
         self.physics_model = simulate_cbed
         if reduction_params['reduction_type'] == 'square': #20250828
             self.num_tiles = reduction_params['reduction_kwargs']['num_tiles']
@@ -73,7 +78,7 @@ class OptimizationProblem(SyntheticTestFunction):
         tiles = temp_reduction_func(self.get_measurement_true())
         del rp['reduction_kwargs']['reduce'] # remove the reduce argument, so it doesn't affect the next call
         dim = tiles[0].shape #temporary fix for list type tiles
-        return dim[-1]*dim[-2] #tile height * tile width, number of pixels in each tile
+        return np.sqrt(dim[-1]*dim[-2]) #tile height * tile width, number of pixels in each tile
     
     def get_physics_simu(self, *params, device_alt=None, params_abtem_alt=None): 
         #allows alternative parameters different from the initial ones for testing

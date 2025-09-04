@@ -264,3 +264,15 @@ def normalize(img):
         return (img-torch.min(img))/(torch.max(img) - torch.min(img))
     else:
         return (img-np.min(img))/(np.max(img) - np.min(img))
+
+def safe_division(dividend, divisor,threshold=0.2, high_value=200):
+    """
+    Divide dividend by divisor safely.
+
+    If |divisor| < threshold, return high_value instead of dividing.
+    """
+    quotient = np.empty_like(dividend, dtype=float)
+    mask = np.abs(divisor) >= threshold
+    quotient[mask] = dividend[mask] / divisor[mask]
+    quotient[~mask] = high_value
+    return quotient

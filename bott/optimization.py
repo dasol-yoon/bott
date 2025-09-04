@@ -209,10 +209,11 @@ def run_one_trial(
         # calculate reduction intermediate outputs for EICF
         if algo=='EICF':
             y_reduction = problem.reduction_func(image_temp).to(device) # [num_tiles,]
-            reductionLoss = problem.scaling_factor*loss_func(y_simu=y_reduction.unsqueeze(0),
-                                                             y_true=reduction_true,
-                                                             reduce=False).unsqueeze(0) # [1,]
-            epsilon = pixelLoss[-1] - reductionLoss
+            reductionLoss = loss_func(y_simu=y_reduction.unsqueeze(0)*problem.scaling_factor,
+                                    y_true=reduction_true *problem.scaling_factor,
+                                    reduce=False).unsqueeze(0) # [1,]
+            
+            # epsilon = pixelLoss[-1] - reductionLoss #20250903
             y_temp = torch.cat((y_reduction.unsqueeze(0),epsilon),dim=-1) # [1,num_tiles+1]
             logger.info(f"y_temp {y_temp}")
             y_value = torch.cat((y_value,y_temp),dim=0)
