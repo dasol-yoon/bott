@@ -282,7 +282,7 @@ def safe_division(dividend, divisor,threshold=0.2, high_value=200):
         dividend = np.asarray(dividend).item()
         divisor = np.asarray(divisor).item()
         if abs(divisor) < threshold:
-            return high_value
+            return np.array( [[high_value]] )
         return np.array( [[dividend / divisor]] )
 
     quotient = np.empty_like(dividend, dtype=float)

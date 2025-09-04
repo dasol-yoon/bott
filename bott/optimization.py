@@ -152,7 +152,9 @@ def run_one_trial(
                                         y_true=reduction_true * problem.scaling_factor.to(device=device),
                                         reduce=False).unsqueeze(-1) # [n_init, 1]
             #epsilon = pixelLoss - reductionLoss
-            delta = torch.Tensor(safe_division(pixelLoss, reductionLoss)).to(device=device) #multiplier to make patch SSE -> pixel SSE
+            delta = torch.Tensor(safe_division(pixelLoss, reductionLoss,
+                                               threshold=problem.safe_div_th_cnst[0],
+                                               high_value=problem.safe_div_th_cnst[1])).to(device=device) #multiplier to make patch SSE -> pixel SSE
             y_value = torch.cat((y_reduction,delta),dim=-1) # [n_init, num_tiles+1]
             
         obj = -1*pixelLoss # maximization direction
@@ -215,10 +217,13 @@ def run_one_trial(
             reductionLoss = loss_func(y_simu=y_reduction.unsqueeze(0)*problem.scaling_factor.to(device=device),
                                     y_true=reduction_true *problem.scaling_factor.to(device=device),
                                     reduce=False).unsqueeze(0) # [1,]
-            
+            #logger.info(f'y_reduction shape: {y_reduction.shape}')
             # epsilon = pixelLoss[-1] - reductionLoss #20250903
-            delta = torch.Tensor(safe_division(pixelLoss[-1], reductionLoss)).to(device=device)
+            delta = torch.Tensor(safe_division(pixelLoss[-1], reductionLoss,
+                                               threshold=problem.safe_div_th_cnst[0],
+                                               high_value=problem.safe_div_th_cnst[1])).to(device=device)
             #delta: multiplier to make patch SSE -> pixel SSE.
+            #logger.info(f'delta shape: {delta.shape}')
             y_temp = torch.cat((y_reduction.unsqueeze(0),delta),dim=-1) # [1,num_tiles+1]
             logger.info(f"y_temp {y_temp}")
             y_value = torch.cat((y_value,y_temp),dim=0)
