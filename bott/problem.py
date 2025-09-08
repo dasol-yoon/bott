@@ -80,7 +80,7 @@ class OptimizationProblem(SyntheticTestFunction):
         tiles = temp_reduction_func(self.get_measurement_true())
         del rp['reduction_kwargs']['reduce'] # remove the reduce argument, so it doesn't affect the next call
         dim = tiles[0].shape #temporary fix for list type tiles
-        return torch.Tensor([[np.sqrt(dim[-1]*dim[-2])]]) #tile height * tile width, number of pixels in each tile
+        return torch.Tensor([np.sqrt(dim[-1]*dim[-2])]) #tile height * tile width, number of pixels in each tile
     
     def get_physics_simu(self, *params, device_alt=None, params_abtem_alt=None): 
         #allows alternative parameters different from the initial ones for testing
