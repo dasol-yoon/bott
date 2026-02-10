@@ -47,6 +47,7 @@ def run_one_trial(
         dtype: torch.dtype = torch.double,
         device_botorch: str='cpu',
         force_restart:Optional[bool]= False,
+        manual_init_evals = None,
 )-> None:
     '''Run one trial of BO loop for the given problem (tile pattern) and algorithm
 
@@ -140,8 +141,16 @@ def run_one_trial(
         # random initial points and calculate intermediate outputs [cbed]
         X=draw_sobol_samples(bounds=problem.bounds.to(device=device),n=n_init_evals,q=1).squeeze(-2).to(dtype=dtype) # X = [n_init, problem.dim], note that X is by default on cpu because problem.bounds is also on cpu
 
+        #20260210temp #need error prevention to ensure the size
+        if manual_init_evals is not None:
+            temp = torch.Tensor(manual_init_evals).to(device=device)
+            if temp.ndim==2 and temp.size(1) ==3:
+                X= torch.cat( [temp,X], dim=0 )
+               
+        
         # Physical images output 
         input_params = X.tolist()
+        logger.info(f'Initial evals: {X}') #20260210
         outputs_np = np.array([problem.get_physics_simu(*param,params_abtem_alt=params_abTEM,device_alt=problem.device) for param in input_params])
         image_output = torch.tensor(outputs_np, dtype=dtype, device=device)
         logger.info(f"image output shape {image_output.shape}")
@@ -175,9 +184,9 @@ def run_one_trial(
         acqf_runtime = []
         gp_runtime = []
         physics_model_runtime =[]
-    
+        n_points_init = X.shape[0]
         time_init_end = time_sync()
-        logger.info(f"Initializing model with '{n_init_evals}' initial evaluations took {time_init_end - time_init_start:.3f} sec")
+        logger.info(f"Initializing model with '{n_points_init}' initial evaluations took {time_init_end - time_init_start:.3f} sec")
         logger.info("==========================================================")
     
     # Start the optimization loop
