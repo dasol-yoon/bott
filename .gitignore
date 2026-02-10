@@ -8,3 +8,6 @@ investigation/
 Objective_EI_plots/
 debug/
 run_job/
+logs/
+logs-current-result-paper/
+logs-const-eps/
