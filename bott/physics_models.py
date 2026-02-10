@@ -1,8 +1,8 @@
 # Put the forward methods (like f(tilt, thickness) = PACBED)
 # We may turn this into a class if we have other physics models
 from bott.utils import get_default_abtem_params, normalize
-
-
+import logging
+logger = logging.getLogger(__name__)
 def simulate_potential(thickness, params_abtem=None, device_simu='cpu'):
     '''
     This one is for future gradient descent purpose
@@ -81,8 +81,9 @@ def simulate_potential(thickness, params_abtem=None, device_simu='cpu'):
     
     return potential_arr
     
-def simulate_cbed(thickness, tilt_x, tilt_y, params_abtem=None, device_simu='cpu', pbar=False):
-    
+def simulate_cbed(thickness, tilt_x, tilt_y, params_abtem=None, 
+                  device_simu='cpu', pbar=False, scan_coords = None):
+    logger.info(f"using new physics model")
     if params_abtem is None:
         params_abtem = get_default_abtem_params()
      
@@ -171,11 +172,15 @@ def simulate_cbed(thickness, tilt_x, tilt_y, params_abtem=None, device_simu='cpu
     # print(f"probe.shape = {probe.shape}")
     # print(f"probe.axes_metadata = {probe.axes_metadata}")
     
-    
-    # Make scan for 1 unit cell along x, y
-    potential_extent = np.array(potential.extent)
-    scan_start = np.array(potential_extent)/2
-    scan_end = scan_start + cell_constants[:2]
+    if scan_coords:
+        scan_start = scan_coords[0]
+        scan_end = scan_coords[1]
+    else:
+        # Make scan for 1 unit cell along x, y
+        potential_extent = np.array(potential.extent)
+        scan_start = np.array(potential_extent)/2
+        scan_end = scan_start + cell_constants[:2]
+    #print(f"scan_start = {scan_start}, scan_end = {scan_end}, scan_step_size = {scan_step_size}")
     grid_scan = abtem.scan.GridScan(start=scan_start, end=scan_end,sampling=scan_step_size)
     # print(f"grid_scan.axes_metadata = {grid_scan.axes_metadata}")
     

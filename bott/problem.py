@@ -35,7 +35,8 @@ class OptimizationProblem(SyntheticTestFunction):
                  device='cuda',
                  params_abtem=None,
                  scale_factor = None,
-                 safe_div_th_cnst = [0.2,200]) -> None: # noise_std somehow has no effect when it's < 1, very weird
+                 safe_div_th_cnst = [0.2,200],
+                 scan_coords=None) -> None: # noise_std somehow has no effect when it's < 1, very weird
         self.dtype = dtype
         self.device = device
         self.norm_arr = norm_arr
@@ -63,6 +64,7 @@ class OptimizationProblem(SyntheticTestFunction):
         self.physics_model = simulate_cbed
         if reduction_params['reduction_type'] == 'square': #20250828
             self.num_tiles = reduction_params['reduction_kwargs']['num_tiles']
+        self.scan_coords = scan_coords
 
     def get_measurement_true(self):
         # Write it as a method so we can preprocess them in the future, like normalization, resampling and such
@@ -101,7 +103,8 @@ class OptimizationProblem(SyntheticTestFunction):
         param_simu_abtem = self.params_abtem if params_abtem_alt is None else params_abtem_alt
         
         simulation = self.physics_model(*params, device_simu=device_simu, 
-                                        params_abtem=param_simu_abtem)
+                                        params_abtem=param_simu_abtem,
+                                        scan_coords = self.scan_coords)
         if self.norm_arr:
             return normalize(simulation) #[0,1]
         else:
@@ -127,7 +130,8 @@ class OptimizationProblem(SyntheticTestFunction):
             measurement_simu = torch.from_numpy(load_tif(file_path)).to(dtype=self.dtype, device=self.device)
         else:
             device = 'gpu' if self.device == 'cuda' else None
-            measurement_simu = self.physics_model(*X, device_simu=device)
+            measurement_simu = self.physics_model(*X, device_simu=device,
+                                                  scan_coords = self.scan_coords)
             if self.save_results:
                 os.makedirs(os.path.dirname(file_path), exist_ok=True)
                 imwrite(file_path, measurement_simu)
