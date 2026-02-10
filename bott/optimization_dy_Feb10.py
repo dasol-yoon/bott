@@ -47,6 +47,7 @@ def run_one_trial(
         dtype: torch.dtype = torch.double,
         device_botorch: str='cpu',
         force_restart:Optional[bool]= False,
+        manual_init_evals = None,
 )-> None:
     '''Run one trial of BO loop for the given problem (tile pattern) and algorithm
 
@@ -83,16 +84,10 @@ def run_one_trial(
 
     if objective is None:
         # objective = GenericMCObjective(lambda Y, X=None: ((Y[...,:-1]-problem.reduction_true.to(device)).pow(2)+Y[...,[-1]]).sum(dim=-1)) #TODO: The sum dimension is still a bit unclear
-        # objective = GenericMCObjective(lambda Y, X=None: -1*(loss_func(Y[...,:-1]*problem.scaling_factor.to(device), 
-        #                                                                reduction_true*problem.scaling_factor.to(device),
-        #                                                                reduce=True)*Y[...,-1])) # should return sample_shape x batch_size x q 
-        logger.info(f'Using {problem.scaling_factor} as scaling factor for the objective -- Multiplication Place Changed')
-        # objective = GenericMCObjective(lambda Y, X=None: -1*(loss_func(Y[...,:-1].to(device), 
-        #                                                         reduction_true.to(device),
-        #                                                         reduce=True)*Y[...,-1])) # should return sample_shape x batch_size x q (01/30/2026 removed scaling factor)
-        objective = GenericMCObjective(lambda Y, X=None: -1*(torch.log(loss_func(Y[...,:-1].to(device), 
-                                                            reduction_true.to(device),
-                                                            reduce=True))+Y[...,-1])) # should return sample_shape x batch_size x q (01/30/2026 removed scaling factor) (02/03/2026 use log)
+        objective = GenericMCObjective(lambda Y, X=None: -1*(loss_func(Y[...,:-1]*problem.scaling_factor.to(device), 
+                                                                       reduction_true*problem.scaling_factor.to(device),
+                                                                       reduce=True)*Y[...,-1])) # should return sample_shape x batch_size x q 
+        logger.info(f'Using {problem.scaling_factor} as scaling factor for the objective')
 
     # check if we have run the experiment. If yes, load the previous result and continue. Otherwise, start from the beginning.
     if os.path.exists(results_dir + f"trial_{trial}.pt") and not force_restart:
@@ -140,6 +135,13 @@ def run_one_trial(
         # random initial points and calculate intermediate outputs [cbed]
         X=draw_sobol_samples(bounds=problem.bounds.to(device=device),n=n_init_evals,q=1).squeeze(-2).to(dtype=dtype) # X = [n_init, problem.dim], note that X is by default on cpu because problem.bounds is also on cpu
 
+         #20260210temp #need error prevention to ensure the size
+        if manual_init_evals is not None:
+            logger.info(f"Using manual initial evaluations: {len(manual_init_evals)}")
+            temp = torch.Tensor(manual_init_evals).to(device=device)
+            if temp.ndim==2 and temp.size(1) ==3:
+                X= torch.cat( [temp,X], dim=0 )
+
         # Physical images output 
         input_params = X.tolist()
         outputs_np = np.array([problem.get_physics_simu(*param,params_abtem_alt=params_abTEM,device_alt=problem.device) for param in input_params])
@@ -153,21 +155,15 @@ def run_one_trial(
 
         # calculate reduction intermediate outputs for EICF in batch
         if algo=='EICF':
-            logger.info(f"Use the new composite with jitter")
-            # y_reduction = problem.reduction_func(image_output).to(device)  # [n_init, num_tiles]
-            y_reduction = (problem.reduction_func(image_output).to(device))*problem.scaling_factor.to(device) #01/30/2026 added scaling factor
-            # reductionLoss = loss_func(y_simu=y_reduction * problem.scaling_factor.to(device=device),
-            #                             y_true=reduction_true * problem.scaling_factor.to(device=device),
-            #                             reduce=False).unsqueeze(-1) # [n_init, 1]
-            reductionLoss = loss_func(y_simu=y_reduction,
-                            y_true=reduction_true,
-                            reduce=False).unsqueeze(-1) # [n_init, 1] #01/30/2026 removed scaling factor
+            y_reduction = problem.reduction_func(image_output).to(device)  # [n_init, num_tiles]
+            reductionLoss = loss_func(y_simu=y_reduction * problem.scaling_factor.to(device=device),
+                                        y_true=reduction_true * problem.scaling_factor.to(device=device),
+                                        reduce=False).unsqueeze(-1) # [n_init, 1]
             #epsilon = pixelLoss - reductionLoss
-            delta = pixelLoss / (reductionLoss + 1e-10) # avoid division by zero modified 01/30/2026
-            # delta = torch.Tensor(safe_division(pixelLoss, reductionLoss,
-            #                                    threshold=problem.safe_div_th_cnst[0],
-            #                                    high_value=problem.safe_div_th_cnst[1])).to(device=device) #multiplier to make patch SSE -> pixel SSE
-            y_value = torch.cat((y_reduction,torch.log(delta)),dim=-1) # [n_init, num_tiles+1] (02/03/2026 use log for delta)
+            delta = torch.Tensor(safe_division(pixelLoss, reductionLoss,
+                                               threshold=problem.safe_div_th_cnst[0],
+                                               high_value=problem.safe_div_th_cnst[1])).to(device=device) #multiplier to make patch SSE -> pixel SSE
+            y_value = torch.cat((y_reduction,delta),dim=-1) # [n_init, num_tiles+1]
             
         obj = -1*pixelLoss # maximization direction
         best_val = obj.max() # tensor
@@ -175,9 +171,9 @@ def run_one_trial(
         acqf_runtime = []
         gp_runtime = []
         physics_model_runtime =[]
-    
+        n_points_init = X.shape[0]
         time_init_end = time_sync()
-        logger.info(f"Initializing model with '{n_init_evals}' initial evaluations took {time_init_end - time_init_start:.3f} sec")
+        logger.info(f"Initializing model with '{n_points_init}' initial evaluations took {time_init_end - time_init_start:.3f} sec")
         logger.info("==========================================================")
     
     # Start the optimization loop
@@ -216,8 +212,8 @@ def run_one_trial(
         time_simu_end = time_sync()
         physics_model_runtime.append(time_simu_end-time_simu_start)
         # image_output = torch.cat((image_output, image_temp.unsqueeze(0)),dim=0) # This will continue to concat new images but image_output is never used. We should remove this unless it's needed somewhere else.
-        # image_t = Image.fromarray(image_temp.cpu().numpy()) #20250520 #01/30/2026 removed -- not saving images anymore
-        # image_t.save(image_dir+make_output_filenm(input_param)) #20250520 #01/30/2026 removed -- not saving images anymore
+        image_t = Image.fromarray(image_temp.cpu().numpy()) #20250520
+        image_t.save(image_dir+make_output_filenm(input_param)) #20250520
 
         # calculate final objective (Loss)
         new_Loss = loss_func(y_simu=image_temp.unsqueeze(0),y_true=measurement_true,reduce=False).unsqueeze(-1) # [1,1]
@@ -225,23 +221,19 @@ def run_one_trial(
 
         # calculate reduction intermediate outputs for EICF
         if algo=='EICF':
-            y_reduction = problem.reduction_func(image_temp).to(device)*problem.scaling_factor.to(device=device) #modified 01/30/2026 # [num_tiles,]
-            # reductionLoss = loss_func(y_simu=y_reduction.unsqueeze(0)*problem.scaling_factor.to(device=device),
-            #                         y_true=reduction_true *problem.scaling_factor.to(device=device),
-            #                         reduce=False).unsqueeze(0) # [1,]
-            reductionLoss = loss_func(y_simu=y_reduction.unsqueeze(0),
-                                    y_true=reduction_true,
-                                    reduce=False).unsqueeze(0) # [1,] modified 01/30/2026
+            y_reduction = problem.reduction_func(image_temp).to(device) # [num_tiles,]
+            reductionLoss = loss_func(y_simu=y_reduction.unsqueeze(0)*problem.scaling_factor.to(device=device),
+                                    y_true=reduction_true *problem.scaling_factor.to(device=device),
+                                    reduce=False).unsqueeze(0) # [1,]
             #logger.info(f'y_reduction shape: {y_reduction.shape}')
             # epsilon = pixelLoss[-1] - reductionLoss #20250903
-            # delta = torch.Tensor(safe_division(pixelLoss[-1], reductionLoss,
-            #                                    threshold=problem.safe_div_th_cnst[0],
-            #                                    high_value=problem.safe_div_th_cnst[1])).to(device=device)
-            delta = new_Loss / (reductionLoss + 1e-10) # avoid division by zero modified 01/30/2026
+            delta = torch.Tensor(safe_division(pixelLoss[-1], reductionLoss,
+                                               threshold=problem.safe_div_th_cnst[0],
+                                               high_value=problem.safe_div_th_cnst[1])).to(device=device)
             #delta: multiplier to make patch SSE -> pixel SSE.
             #logger.info(f'delta shape: {delta.shape}')
-            y_temp = torch.cat((y_reduction.unsqueeze(0),torch.log(delta)),dim=-1) # [1,num_tiles+1] #02/03/2026 use log for delta
-            logger.info(f"y_temp (log for the last one) {y_temp}")
+            y_temp = torch.cat((y_reduction.unsqueeze(0),delta),dim=-1) # [1,num_tiles+1]
+            logger.info(f"y_temp {y_temp}")
             y_value = torch.cat((y_value,y_temp),dim=0)
         
         # Display and save results
@@ -258,9 +250,9 @@ def run_one_trial(
         logger.info(f"Physics simulation time: {time_simu_end - time_simu_start:.3f} sec")
         logger.info(f"Iteration time: {time_iter_end - time_iter_start:.3f} sec")
         logger.info(f"Suggested point: {new_x.cpu().numpy()}")
-        logger.info(f"new pixel Loss value (no minus): {new_Loss.cpu().numpy()}")
+        logger.info(f"new Loss value: {new_Loss.cpu().numpy()}")
         if algo not in ['EI','KG','Random','TS']:
-            logger.info(f"Reduction valued (log scale the last one): {y_temp}")
+            logger.info(f"Reduction valued: {y_temp}")
         logger.info(f"Best iteration index found: {best_idx+1}")  
         logger.info(f"Best point found: {best_params}")
         logger.info(f"Best objective function value found: {best_val}")
