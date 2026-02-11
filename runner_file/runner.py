@@ -24,7 +24,8 @@ def main(
         trial: int,
         algo: str,
         num_iter: int,
-        param_truth: str | list[float]
+        param_truth: str | list[float],
+        noisy_ground_truth_std: float | None = None
 ) -> None: 
         """Run one replication for the dropwave function network test problem
 
@@ -40,6 +41,9 @@ def main(
             None.
         """
         ground_truth = torch.Tensor(simulate_cbed(param_truth[0],param_truth[1],param_truth[2], device_simu='gpu')) # abtem takes "cpu" or "gpu"
+        if noisy_ground_truth_std is not None:
+            logger.info(f"Considering noisy ground truth with std {noisy_ground_truth_std}")
+            ground_truth = ground_truth + torch.normal(0,noisy_ground_truth_std,size=ground_truth.shape)
         # OptimizationProblem would keep all the tensor on the specified device
         problem_name = f"GT_{param_truth[0]}_{param_truth[1]}_{param_truth[2]}"
         problem = OptimizationProblem(ground_truth=ground_truth,

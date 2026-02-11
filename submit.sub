@@ -18,7 +18,7 @@ param1=$4
 echo "Running trial $trial with algo $algo, num_iter $num_iter"
 echo "param_truth: ($param1)"
 
-/home/pb482/miniconda3/envs/bott/bin/python ./runner.py \
+/home/pb482/miniconda3/envs/bott/bin/python ./runner_file/runner.py \
     --trial $trial \
     --algo $algo \
     --num_iter $num_iter \
