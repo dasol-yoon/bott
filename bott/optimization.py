@@ -34,6 +34,46 @@ from bott.utils import time_sync, make_output_filenm, safe_division
 
 from PIL import Image #20250520
 
+# For new composite to control epsilon behavior (solving for epsilon and delta)
+def solve(pixelSSE_val, patchSSE_val, delta_max=50.0):
+    device = pixelSSE_val.device
+    dtype  = pixelSSE_val.dtype
+
+    epsilon = torch.zeros_like(pixelSSE_val)
+    delta   = torch.zeros_like(pixelSSE_val)
+
+    # mask for nonzero patchSSE
+    mask = patchSSE_val != 0
+
+    # ---- Case 1: patchSSE != 0 ----
+    if mask.any():
+        p = patchSSE_val[mask]
+        y = pixelSSE_val[mask]
+
+        x1 = (y - delta_max) / p
+        x2 = (y + delta_max) / p
+
+        xmin = torch.minimum(x1, x2)
+        xmax = torch.maximum(x1, x2)
+
+        eps0 = torch.tensor(1.0, device=device, dtype=dtype)
+        eps  = torch.clamp(eps0, xmin, xmax)
+
+        epsilon[mask] = eps
+        delta[mask]   = y - p * eps
+
+    # ---- Case 2: patchSSE == 0 ----
+    zero_mask = ~mask
+    if zero_mask.any():
+        epsilon[zero_mask] = 0.0
+        delta[zero_mask]   = pixelSSE_val[zero_mask]
+
+    logging.info(f"epsilon: {epsilon}")
+    logging.info(f"delta: {delta}")
+    logging.info(f'check: patch*eps + delta = {patchSSE_val*epsilon + delta}')
+
+    return epsilon, delta
+
 def run_one_trial(
         problem_name: str,
         problem: SyntheticTestFunction,
@@ -91,10 +131,14 @@ def run_one_trial(
         # objective = GenericMCObjective(lambda Y, X=None: -1*(loss_func(Y[...,:-1].to(device), 
         #                                                         reduction_true.to(device),
         #                                                         reduce=True)*Y[...,-1])) # should return sample_shape x batch_size x q (01/30/2026 removed scaling factor)
-        objective = GenericMCObjective(lambda Y, X=None: -1*(torch.log(loss_func(Y[...,:-1].to(device), 
+        # objective = GenericMCObjective(lambda Y, X=None: -1*(torch.log(loss_func(Y[...,:-1].to(device), 
+        #                                                     reduction_true.to(device),
+        #                                                     reduce=True))+Y[...,-1])) # should return sample_shape x batch_size x q (01/30/2026 removed scaling factor) (02/03/2026 use log)
+        # Changed 02/11/2026 -- using new composite to control epsilon behavior
+        # -1* (patchSSE*epsilon + delta) -- no log
+        objective = GenericMCObjective(lambda Y, X=None: -1*((loss_func(Y[...,:-2].to(device), 
                                                             reduction_true.to(device),
-                                                            reduce=True))+Y[...,-1])) # should return sample_shape x batch_size x q (01/30/2026 removed scaling factor) (02/03/2026 use log)
-
+                                                            reduce=True)*Y[...,-2])+Y[...,-1]) )
     # check if we have run the experiment. If yes, load the previous result and continue. Otherwise, start from the beginning.
     if os.path.exists(results_dir + f"trial_{trial}.pt") and not force_restart:
         logger.info(
@@ -172,11 +216,15 @@ def run_one_trial(
                             y_true=reduction_true,
                             reduce=False).unsqueeze(-1) # [n_init, 1] #01/30/2026 removed scaling factor
             #epsilon = pixelLoss - reductionLoss
-            delta = pixelLoss / (reductionLoss + 1e-10) # avoid division by zero modified 01/30/2026
+            # delta = pixelLoss / (reductionLoss + 1e-10) # avoid division by zero modified 01/30/2026
             # delta = torch.Tensor(safe_division(pixelLoss, reductionLoss,
             #                                    threshold=problem.safe_div_th_cnst[0],
             #                                    high_value=problem.safe_div_th_cnst[1])).to(device=device) #multiplier to make patch SSE -> pixel SSE
-            y_value = torch.cat((y_reduction,torch.log(delta)),dim=-1) # [n_init, num_tiles+1] (02/03/2026 use log for delta)
+            logging.info(f'Using new composite form!')
+            epsilon, delta = solve(pixelLoss, reductionLoss, delta_max =0.5) #2/11/2026 for new composite to control epsilon behavior
+            y_value = torch.cat((y_reduction,epsilon,delta),dim=-1) # [n_init, num_tiles+2]#2/11/2026 for new composite to control epsilon behavior
+            logging.info(f'Initial y_value: {y_value}')            
+            # y_value = torch.cat((y_reduction,torch.log(delta)),dim=-1) # [n_init, num_tiles+1] (02/03/2026 use log for delta)
             
         obj = -1*pixelLoss # maximization direction
         best_val = obj.max() # tensor
@@ -246,11 +294,14 @@ def run_one_trial(
             # delta = torch.Tensor(safe_division(pixelLoss[-1], reductionLoss,
             #                                    threshold=problem.safe_div_th_cnst[0],
             #                                    high_value=problem.safe_div_th_cnst[1])).to(device=device)
-            delta = new_Loss / (reductionLoss + 1e-10) # avoid division by zero modified 01/30/2026
+            # delta = new_Loss / (reductionLoss + 1e-10) # avoid division by zero modified 01/30/2026
+            epsilon, delta = solve(new_Loss, reductionLoss, delta_max =50) #2/11/2026 for new composite to control epsilon behavior
             #delta: multiplier to make patch SSE -> pixel SSE.
             #logger.info(f'delta shape: {delta.shape}')
-            y_temp = torch.cat((y_reduction.unsqueeze(0),torch.log(delta)),dim=-1) # [1,num_tiles+1] #02/03/2026 use log for delta
-            logger.info(f"y_temp (log for the last one) {y_temp}")
+            # y_temp = torch.cat((y_reduction.unsqueeze(0),torch.log(delta)),dim=-1) # [1,num_tiles+1] #02/03/2026 use log for delta
+            # logger.info(f"y_temp (log for the last one) {y_temp}")
+            y_temp = torch.cat((y_reduction.unsqueeze(0),epsilon,delta),dim=-1) # [1,num_tiles+2]#2/11/2026 for new composite to control epsilon behavior
+            logging.info(f"y_temp (new composite form) {y_temp}")
             y_value = torch.cat((y_value,y_temp),dim=0)
         
         # Display and save results
@@ -269,10 +320,10 @@ def run_one_trial(
         logger.info(f"Suggested point: {new_x.cpu().numpy()}")
         logger.info(f"new pixel Loss value (no minus): {new_Loss.cpu().numpy()}")
         if algo not in ['EI','KG','Random','TS']:
-            logger.info(f"Reduction valued (log scale the last one): {y_temp}")
-        logger.info(f"Best iteration index found: {best_idx+1}")  
+            logger.info(f"Evaluated multi-output value (patch, epsilon, delta): {y_temp}")
+        # logger.info(f"Best iteration index found: {best_idx+1}")  
         logger.info(f"Best point found: {best_params}")
-        logger.info(f"Best objective function value found: {best_val}")
+        logger.info(f"Best objective function value (pixelSSE) found: {best_val}")
         logger.info(f"==========================================================")
         if algo == 'EICF':
             BO_results = {
