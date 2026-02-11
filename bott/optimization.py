@@ -68,10 +68,7 @@ def solve(pixelSSE_val, patchSSE_val, delta_max=50.0):
         epsilon[zero_mask] = 0.0
         delta[zero_mask]   = pixelSSE_val[zero_mask]
 
-    logging.info(f"epsilon: {epsilon}")
-    logging.info(f"delta: {delta}")
-    logging.info(f'check: patch*eps + delta = {patchSSE_val*epsilon + delta}')
-
+    logging.info(f"pixelSSE_val: {pixelSSE_val} | patchSSE_val: {patchSSE_val} | epsilon: {epsilon} | delta: {delta} | check: {pixelSSE_val == patchSSE_val*epsilon + delta}")
     return epsilon, delta
 
 def run_one_trial(
@@ -206,7 +203,7 @@ def run_one_trial(
 
         # calculate reduction intermediate outputs for EICF in batch
         if algo=='EICF':
-            logger.info(f"Use the new composite with jitter")
+            logging.info(f'Using pixelSSE = patchSSE*epsilon + delta composite form!')
             # y_reduction = problem.reduction_func(image_output).to(device)  # [n_init, num_tiles]
             y_reduction = (problem.reduction_func(image_output).to(device))*problem.scaling_factor.to(device) #01/30/2026 added scaling factor
             # reductionLoss = loss_func(y_simu=y_reduction * problem.scaling_factor.to(device=device),
@@ -220,10 +217,10 @@ def run_one_trial(
             # delta = torch.Tensor(safe_division(pixelLoss, reductionLoss,
             #                                    threshold=problem.safe_div_th_cnst[0],
             #                                    high_value=problem.safe_div_th_cnst[1])).to(device=device) #multiplier to make patch SSE -> pixel SSE
-            logging.info(f'Using new composite form!')
+
             epsilon, delta = solve(pixelLoss, reductionLoss, delta_max =0.5) #2/11/2026 for new composite to control epsilon behavior
             y_value = torch.cat((y_reduction,epsilon,delta),dim=-1) # [n_init, num_tiles+2]#2/11/2026 for new composite to control epsilon behavior
-            logging.info(f'Initial y_value: {y_value}')            
+            logging.info(f'Initial intermediate outputs (patch, epsilon, delta) for EICF: {y_value}')            
             # y_value = torch.cat((y_reduction,torch.log(delta)),dim=-1) # [n_init, num_tiles+1] (02/03/2026 use log for delta)
             
         obj = -1*pixelLoss # maximization direction
