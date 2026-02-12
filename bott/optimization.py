@@ -47,8 +47,8 @@ def solve(pixelSSE_val, patchSSE_val):
     dtype  = pixelSSE_val.dtype
 
     # bounds from |ln eps| <= 1
-    eps_min = torch.tensor(math.exp(-1.0), device=device, dtype=dtype)  # e^{-1}
-    eps_max = torch.tensor(math.exp( 1.0), device=device, dtype=dtype)  # e
+    eps_min = torch.exp(torch.tensor(-1.0, device=device, dtype=dtype))
+    eps_max = torch.exp(torch.tensor( 1.0, device=device, dtype=dtype))
 
     epsilon = torch.empty_like(pixelSSE_val)
     delta   = torch.empty_like(pixelSSE_val)
