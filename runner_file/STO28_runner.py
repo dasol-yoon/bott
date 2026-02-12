@@ -2,14 +2,6 @@
 import logging
 import warnings
 
-import sys
-from pathlib import Path
-
-# Ensure project root is on PYTHONPATH so "bott" can be imported when run from run_job/ or via SLURM
-_project_root = Path(__file__).resolve().parent.parent
-if str(_project_root) not in sys.path:
-    sys.path.insert(0, str(_project_root))
-
 import torch
 from botorch.exceptions import InputDataWarning
 
@@ -38,7 +30,6 @@ def main(
         num_iter: int,
         n_init_evals: int,
         param_truth: str | list[float],
-        noisy_ground_truth_std: float | None = None,
         manual_init_evals: list[list[float]] | None = None,
 ) -> None: 
         """Run one replication for the dropwave function network test problem
@@ -105,7 +96,7 @@ def main(
                                           (imgshape[0]/originshape[0], 
                                            imgshape[1]/originshape[1]), order=3)
               ground_truth = torch.Tensor(ground_truth)
-              problem_name = f"domain_5seg_mult_factor_obj_adj"
+              problem_name = f"EXP_STO28_domain_28"
 
         elif isinstance(param_truth, list):
               ground_truth = torch.Tensor(simulate_cbed(param_truth[0],param_truth[1],
@@ -114,13 +105,7 @@ def main(
               problem_name = f"GT_{param_truth[0]}_{param_truth[1]}_{param_truth[2]}"
         else:
               raise ValueError("param_truth should be a list of 3 floats or a string path to the image.")
-        if noisy_ground_truth_std is not None:
-            logger.info(f"Considering noisy ground truth with std {noisy_ground_truth_std}")
-            ground_truth = ground_truth + torch.normal(0,noisy_ground_truth_std,size=ground_truth.shape)
-            is_noisy_ground_truth = f"noisy_{noisy_ground_truth_std}"
-        else:
-            logger.info("No noisy ground truth considered")
-            is_noisy_ground_truth = "nonoise"
+
         sf_quad = 4303
         sf_cent = 7440
         temp = torch.Tensor([sf_cent, sf_quad, sf_quad, sf_quad, sf_quad])
@@ -128,9 +113,10 @@ def main(
 
         # OptimizationProblem would keep all the tensor on the specified device
         problem = OptimizationProblem(ground_truth=ground_truth,
-                                    output_path='/home/pb482/bott/output/', 
+                                    output_path='/home/pb482/bott/output_experimental/', 
                                     save_results=True, 
-                                    reduction_params={'reduction_type':'domain', 'reduction_kwargs':{'radius':0.31}},
+                                    reduction_params={'reduction_type':'domain', 
+                                                    'reduction_kwargs':{'radius':0.31}},
                                     loss_params={'loss_type':'SSE', 'dp_pow': 1}, 
                                     norm_arr=False,
                                     dim=3, 
@@ -143,7 +129,7 @@ def main(
                                     safe_div_th_cnst = [0.2,200]
                                     ) # "cpu" or "cuda" for physics simulation
         if manual_init_evals is not None:
-            run_one_trial(problem_name=problem_name+'_SSE_dppow1_noNorm_init'+str(n_init_evals)+'_manual'+str(len(manual_init_evals))+'_'+is_noisy_ground_truth, 
+            run_one_trial(problem_name=problem_name+'_noNorm_manual'+str(len(manual_init_evals)), 
                     problem=problem, 
                     algo=algo, 
                     trial=trial, 
@@ -155,7 +141,7 @@ def main(
                     manual_init_evals = manual_init_evals,
                     )
         else:
-            run_one_trial(problem_name=problem_name+'_SSE_dppow1_noNorm_init'+str(n_init_evals)+'_'+is_noisy_ground_truth, 
+            run_one_trial(problem_name=problem_name+'_noNorm', 
                     problem=problem, 
                     algo=algo, 
                     trial=trial,
@@ -163,8 +149,7 @@ def main(
                     max_iter=num_iter, 
                     objective=None,
                     dtype=torch.float64,
-                    device_botorch=device
-                    )
+                    device_botorch=device)
 
 
 if __name__ == "__main__":
