@@ -47,8 +47,12 @@ def solve(pixelSSE_val, patchSSE_val):
     dtype  = pixelSSE_val.dtype
 
     # bounds from |ln eps| <= 1
-    eps_min = torch.exp(torch.tensor(-1.0, device=device, dtype=dtype))
-    eps_max = torch.exp(torch.tensor( 1.0, device=device, dtype=dtype))
+    # eps_min = torch.exp(torch.tensor(-1.0, device=device, dtype=dtype))
+    # eps_max = torch.exp(torch.tensor( 1.0, device=device, dtype=dtype))
+    # bounds from |log10 eps| <= 1
+    logging.info(f'bounds from |log10 eps| <= 1')
+    eps_min = torch.pow(10.0, torch.tensor(-1.0, device=device, dtype=dtype))
+    eps_max = torch.pow(10.0, torch.tensor( 1.0, device=device, dtype=dtype))
 
     epsilon = torch.empty_like(pixelSSE_val)
     delta   = torch.empty_like(pixelSSE_val)
@@ -61,7 +65,7 @@ def solve(pixelSSE_val, patchSSE_val):
         p = patchSSE_val[mask]
         y = pixelSSE_val[mask]
 
-        # unconstrained best eps is y/p, then clamp to [e^{-1}, e]
+        # unconstrained best eps is y/p, then clamp to [e^{-1}, e] or [10^{-1}, 10^1]
         eps = torch.clamp(y / p, eps_min, eps_max)
 
         epsilon[mask] = eps
