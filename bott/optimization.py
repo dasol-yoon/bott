@@ -35,40 +35,51 @@ from bott.utils import time_sync, make_output_filenm, safe_division
 from PIL import Image #20250520
 
 # For new composite to control epsilon behavior (solving for epsilon and delta)
-def solve(pixelSSE_val, patchSSE_val, delta_max=50.0):
+def solve(pixelSSE_val, patchSSE_val):
+    """
+    Solve:  min |delta|
+           s.t. |log epsilon| <= 1  (natural log)
+                pixel = epsilon*patch + delta
+
+    Returns epsilon, delta (same shape as inputs)
+    """
     device = pixelSSE_val.device
     dtype  = pixelSSE_val.dtype
 
-    epsilon = torch.zeros_like(pixelSSE_val)
-    delta   = torch.zeros_like(pixelSSE_val)
+    # bounds from |ln eps| <= 1
+    eps_min = torch.tensor(math.exp(-1.0), device=device, dtype=dtype)  # e^{-1}
+    eps_max = torch.tensor(math.exp( 1.0), device=device, dtype=dtype)  # e
 
-    # mask for nonzero patchSSE
+    epsilon = torch.empty_like(pixelSSE_val)
+    delta   = torch.empty_like(pixelSSE_val)
+
+    # mask for nonzero patch
     mask = patchSSE_val != 0
 
-    # ---- Case 1: patchSSE != 0 ----
+    # ---- Case 1: patch != 0 ----
     if mask.any():
         p = patchSSE_val[mask]
         y = pixelSSE_val[mask]
 
-        x1 = (y - delta_max) / p
-        x2 = (y + delta_max) / p
-
-        xmin = torch.minimum(x1, x2)
-        xmax = torch.maximum(x1, x2)
-
-        eps0 = torch.tensor(1.0, device=device, dtype=dtype)
-        eps  = torch.clamp(eps0, xmin, xmax)
+        # unconstrained best eps is y/p, then clamp to [e^{-1}, e]
+        eps = torch.clamp(y / p, eps_min, eps_max)
 
         epsilon[mask] = eps
         delta[mask]   = y - p * eps
 
-    # ---- Case 2: patchSSE == 0 ----
+    # ---- Case 2: patch == 0 ----
     zero_mask = ~mask
     if zero_mask.any():
-        epsilon[zero_mask] = 0.0
+        # when p=0: y = delta always; eps can be any value in [e^{-1}, e]
+        epsilon[zero_mask] = 1.0  # convenient feasible choice
         delta[zero_mask]   = pixelSSE_val[zero_mask]
 
-    logging.info(f"pixelSSE_val: {pixelSSE_val} | patchSSE_val: {patchSSE_val} | epsilon: {epsilon} | delta: {delta} | check: {pixelSSE_val == patchSSE_val*epsilon + delta}")
+    # (optional) numerical check
+    check = torch.allclose(pixelSSE_val, patchSSE_val * epsilon + delta, rtol=0, atol=1e-12)
+    logging.info(
+        f"pixel: {pixelSSE_val} | patch: {patchSSE_val} | eps: {epsilon} | delta: {delta} | check: {check}"
+    )
+
     return epsilon, delta
 
 def run_one_trial(
@@ -115,7 +126,7 @@ def run_one_trial(
                     format='%(asctime)s - %(levelname)s - %(message)s')
     logger = logging.getLogger(__name__)  # Get a logger for the current module
     loss_func = problem.loss_func
-    reduction_true = problem.reduction_true.to(device)
+    reduction_true = problem.reduction_true.to(device) * problem.scaling_factor.to(device) #2/11/2026 added scaling factor
     measurement_true = problem.measurement_true.to(device)
     params_abTEM = problem.params_abtem
 
@@ -200,7 +211,7 @@ def run_one_trial(
     
         # calculate final objective (Loss), this is pixelSSE. Might consider rename SSE_value into pixel_losses, and make reduction_SSE into group_loss.
         pixelLoss  = loss_func(y_simu=image_output, y_true=measurement_true, reduce=False).unsqueeze(-1) # pixelLoss = [n_init, 1]
-
+        logging.info(f'Initial pixelLoss: {pixelLoss}')
         # calculate reduction intermediate outputs for EICF in batch
         if algo=='EICF':
             logging.info(f'Using pixelSSE = patchSSE*epsilon + delta composite form!')
@@ -218,7 +229,7 @@ def run_one_trial(
             #                                    threshold=problem.safe_div_th_cnst[0],
             #                                    high_value=problem.safe_div_th_cnst[1])).to(device=device) #multiplier to make patch SSE -> pixel SSE
 
-            epsilon, delta = solve(pixelLoss, reductionLoss, delta_max =0.5) #2/11/2026 for new composite to control epsilon behavior
+            epsilon, delta = solve(pixelLoss, reductionLoss) #2/11/2026 for new composite to control epsilon behavior
             y_value = torch.cat((y_reduction,epsilon,delta),dim=-1) # [n_init, num_tiles+2]#2/11/2026 for new composite to control epsilon behavior
             logging.info(f'Initial intermediate outputs (patch, epsilon, delta) for EICF: {y_value}')            
             # y_value = torch.cat((y_reduction,torch.log(delta)),dim=-1) # [n_init, num_tiles+1] (02/03/2026 use log for delta)
@@ -292,7 +303,7 @@ def run_one_trial(
             #                                    threshold=problem.safe_div_th_cnst[0],
             #                                    high_value=problem.safe_div_th_cnst[1])).to(device=device)
             # delta = new_Loss / (reductionLoss + 1e-10) # avoid division by zero modified 01/30/2026
-            epsilon, delta = solve(new_Loss, reductionLoss, delta_max =50) #2/11/2026 for new composite to control epsilon behavior
+            epsilon, delta = solve(new_Loss, reductionLoss) #2/11/2026 for new composite to control epsilon behavior
             #delta: multiplier to make patch SSE -> pixel SSE.
             #logger.info(f'delta shape: {delta.shape}')
             # y_temp = torch.cat((y_reduction.unsqueeze(0),torch.log(delta)),dim=-1) # [1,num_tiles+1] #02/03/2026 use log for delta
@@ -418,12 +429,12 @@ def parse():
     parser.add_argument("--trial", "-t", type=int, default=0)
     parser.add_argument("--algo", "-a", type=str, default="EI")
     parser.add_argument("--num_iter", "-n", type=int, default=50)
-    
+    parser.add_argument("--n_init_evals", "-ni", type=int, default=7)
     grp = parser.add_mutually_exclusive_group(required=True)
     grp.add_argument('--param_truth', "-p", type=float, nargs=3, help='Three param truth values')
     grp.add_argument('--param_truth_path', "-f", type=str, help='path to the ground truth image')
 
-    parser.add_argument('--nt',type=int,default=1) #20250603 temporary edit
+    # parser.add_argument('--nt',type=int,default=1) #20250603 temporary edit
     
     args = parser.parse_args()
 
