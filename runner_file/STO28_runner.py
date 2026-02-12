@@ -16,7 +16,7 @@ from botorch.exceptions import InputDataWarning
 from bott.optimization import run_one_trial, parse
 from bott.physics_models import simulate_cbed
 from bott.problem import OptimizationProblem
-from bott.io import load_img
+from bott.io import load_img, load_tif
 from bott.utils import print_system_info
 
 from scipy import ndimage
@@ -95,7 +95,7 @@ def main(
         print_system_info()
         #todo: make it into a function and put it in io.py
         if isinstance(param_truth, str):
-              ground_truth = load_img(param_truth)
+              ground_truth = load_tif(param_truth)
 
               imgshape = simulate_cbed(1,0,0, params_abTEM).shape
               originshape = ground_truth.shape
@@ -104,6 +104,8 @@ def main(
                                           (imgshape[0]/originshape[0], 
                                            imgshape[1]/originshape[1]), order=3)
               ground_truth = torch.Tensor(ground_truth)
+              logging.info(f'ground_truth {ground_truth}')
+              logging.info(f'ground_truth max and min {torch.max(ground_truth)}, {torch.min(ground_truth)}')
               problem_name = f"EXP_STO28_domain_28"
 
         elif isinstance(param_truth, list):
@@ -118,7 +120,8 @@ def main(
         sf_cent = 7440
         temp = torch.Tensor([sf_cent, sf_quad, sf_quad, sf_quad, sf_quad])
         sf_domain5seg = torch.sqrt(temp)
-
+        logging.info(f'ground_truth {ground_truth}')
+        logging.info(f'ground_truth shape {ground_truth.shape}')
         # OptimizationProblem would keep all the tensor on the specified device
         problem = OptimizationProblem(ground_truth=ground_truth,
                                     output_path='/home/pb482/bott/output_experimental/', 

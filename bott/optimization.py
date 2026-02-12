@@ -127,6 +127,7 @@ def run_one_trial(
     logger = logging.getLogger(__name__)  # Get a logger for the current module
     loss_func = problem.loss_func
     reduction_true = problem.reduction_true.to(device) * problem.scaling_factor.to(device) #2/11/2026 added scaling factor
+    logging.info(f'reduction_true {reduction_true}')
     measurement_true = problem.measurement_true.to(device)
     params_abTEM = problem.params_abtem
 
@@ -217,12 +218,14 @@ def run_one_trial(
             logging.info(f'Using pixelSSE = patchSSE*epsilon + delta composite form!')
             # y_reduction = problem.reduction_func(image_output).to(device)  # [n_init, num_tiles]
             y_reduction = (problem.reduction_func(image_output).to(device))*problem.scaling_factor.to(device) #01/30/2026 added scaling factor
+            logging.info(f'y_reduction {y_reduction}')
             # reductionLoss = loss_func(y_simu=y_reduction * problem.scaling_factor.to(device=device),
             #                             y_true=reduction_true * problem.scaling_factor.to(device=device),
             #                             reduce=False).unsqueeze(-1) # [n_init, 1]
             reductionLoss = loss_func(y_simu=y_reduction,
                             y_true=reduction_true,
                             reduce=False).unsqueeze(-1) # [n_init, 1] #01/30/2026 removed scaling factor
+            logging.info(f'reductionLoss {reductionLoss}')
             #epsilon = pixelLoss - reductionLoss
             # delta = pixelLoss / (reductionLoss + 1e-10) # avoid division by zero modified 01/30/2026
             # delta = torch.Tensor(safe_division(pixelLoss, reductionLoss,

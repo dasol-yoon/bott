@@ -1,8 +1,8 @@
 #!/bin/sh
 
-for trial in $(seq 1 1 1)
+for trial in $(seq 18 1 18)
 do
-    for algo in EI KG Random 
+    for algo in EI
     do
         for num_iter in 50
         do

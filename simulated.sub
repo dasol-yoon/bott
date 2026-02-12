@@ -8,7 +8,7 @@
 #SBATCH --time=24:00:00
 #SBATCH --partition=default_partition        # Request partition
 #SBATCH --gres=gpu:1                  # Type/number of GPUs needed
-#SBATCH --exclude=jjs533-compute-03,lil-compute-05 
+#SBATCH --exclude=jjs533-compute-03,lil-compute-05,bhattacharjee-compute-02 
 
 trial=$1
 algo=$2
