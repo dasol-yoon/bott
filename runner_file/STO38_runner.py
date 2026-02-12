@@ -104,7 +104,7 @@ def main(
                                           (imgshape[0]/originshape[0], 
                                            imgshape[1]/originshape[1]), order=3)
               ground_truth = torch.Tensor(ground_truth)
-              problem_name = f"EXP_STO28_domain_28"
+              problem_name = f"EXP_STO38_domain_38"
 
         elif isinstance(param_truth, list):
               ground_truth = torch.Tensor(simulate_cbed(param_truth[0],param_truth[1],
