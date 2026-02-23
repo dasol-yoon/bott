@@ -111,7 +111,7 @@ def main(
               ground_truth = torch.Tensor(simulate_cbed(param_truth[0],param_truth[1],
                                                   param_truth[2], params_abTEM,
                                                   device_simu='gpu')) # abtem takes "cpu" or "gpu"
-              problem_name = f"GT_{param_truth[0]}_{param_truth[1]}_{param_truth[2]}_newcomposite"
+              problem_name = f"GT_{param_truth[0]}_{param_truth[1]}_{param_truth[2]}_newcomposite_logepsilon_bound10_feb17"
         else:
               raise ValueError("param_truth should be a list of 3 floats or a string path to the image.")
         if noisy_ground_truth_std is not None:
