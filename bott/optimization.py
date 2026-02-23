@@ -49,8 +49,9 @@ def solve(pixelSSE_val, patchSSE_val):
     # bounds from |ln eps| <= 1
     # eps_min = torch.exp(torch.tensor(-1.0, device=device, dtype=dtype))
     # eps_max = torch.exp(torch.tensor( 1.0, device=device, dtype=dtype))
-    # bounds from |log10 eps| <= 1
-    logging.info(f'bounds from |log10 eps| <= 1')
+
+    # # bounds from |log10 eps| <= 1
+    # logging.info(f'bounds from |log10 eps| <= 1')
     eps_min = torch.pow(10.0, torch.tensor(-1.0, device=device, dtype=dtype))
     eps_max = torch.pow(10.0, torch.tensor( 1.0, device=device, dtype=dtype))
 
@@ -136,22 +137,13 @@ def run_one_trial(
     params_abTEM = problem.params_abtem
 
     if objective is None:
-        # objective = GenericMCObjective(lambda Y, X=None: ((Y[...,:-1]-problem.reduction_true.to(device)).pow(2)+Y[...,[-1]]).sum(dim=-1)) #TODO: The sum dimension is still a bit unclear
-        # objective = GenericMCObjective(lambda Y, X=None: -1*(loss_func(Y[...,:-1]*problem.scaling_factor.to(device), 
-        #                                                                reduction_true*problem.scaling_factor.to(device),
-        #                                                                reduce=True)*Y[...,-1])) # should return sample_shape x batch_size x q 
+
         logger.info(f'Using {problem.scaling_factor} as scaling factor for the objective -- Multiplication Place Changed')
-        # objective = GenericMCObjective(lambda Y, X=None: -1*(loss_func(Y[...,:-1].to(device), 
-        #                                                         reduction_true.to(device),
-        #                                                         reduce=True)*Y[...,-1])) # should return sample_shape x batch_size x q (01/30/2026 removed scaling factor)
-        # objective = GenericMCObjective(lambda Y, X=None: -1*(torch.log(loss_func(Y[...,:-1].to(device), 
-        #                                                     reduction_true.to(device),
-        #                                                     reduce=True))+Y[...,-1])) # should return sample_shape x batch_size x q (01/30/2026 removed scaling factor) (02/03/2026 use log)
-        # Changed 02/11/2026 -- using new composite to control epsilon behavior
-        # -1* (patchSSE*epsilon + delta) -- no log
-        objective = GenericMCObjective(lambda Y, X=None: -1*((loss_func(Y[...,:-2].to(device), 
-                                                            reduction_true.to(device),
-                                                            reduce=True)*Y[...,-2])+Y[...,-1]) )
+        logging.info(f'Using pixelSSE = patchSSE*epsilon + delta composite form!')
+        objective = GenericMCObjective(lambda Y, X=None: -1*((loss_func(Y[...,:-2].to(device), reduction_true.to(device),reduce=True)*torch.exp(Y[...,-2])+Y[...,-1])) )#for pixel=patch*exp(log(epsilon))+delta form 02/17/2026 pb
+        # logging.info(f'Using test linear form for the objective 2/12/2026')
+        # objective = GenericMCObjective(lambda Y, X=None: -1*((loss_func(Y[...,:-1].to(device), reduction_true.to(device),reduce=True))+Y[...,-1])) # test linear form 02/12/2026 pb
+    
     # check if we have run the experiment. If yes, load the previous result and continue. Otherwise, start from the beginning.
     if os.path.exists(results_dir + f"trial_{trial}.pt") and not force_restart:
         logger.info(
@@ -219,27 +211,23 @@ def run_one_trial(
         logging.info(f'Initial pixelLoss: {pixelLoss}')
         # calculate reduction intermediate outputs for EICF in batch
         if algo=='EICF':
-            logging.info(f'Using pixelSSE = patchSSE*epsilon + delta composite form!')
-            # y_reduction = problem.reduction_func(image_output).to(device)  # [n_init, num_tiles]
             y_reduction = (problem.reduction_func(image_output).to(device))*problem.scaling_factor.to(device) #01/30/2026 added scaling factor
             logging.info(f'y_reduction {y_reduction}')
-            # reductionLoss = loss_func(y_simu=y_reduction * problem.scaling_factor.to(device=device),
-            #                             y_true=reduction_true * problem.scaling_factor.to(device=device),
-            #                             reduce=False).unsqueeze(-1) # [n_init, 1]
             reductionLoss = loss_func(y_simu=y_reduction,
                             y_true=reduction_true,
                             reduce=False).unsqueeze(-1) # [n_init, 1] #01/30/2026 removed scaling factor
             logging.info(f'reductionLoss {reductionLoss}')
-            #epsilon = pixelLoss - reductionLoss
-            # delta = pixelLoss / (reductionLoss + 1e-10) # avoid division by zero modified 01/30/2026
-            # delta = torch.Tensor(safe_division(pixelLoss, reductionLoss,
-            #                                    threshold=problem.safe_div_th_cnst[0],
-            #                                    high_value=problem.safe_div_th_cnst[1])).to(device=device) #multiplier to make patch SSE -> pixel SSE
 
+            # logging.info(f'Using test linear form for the EICF 2/12/2026')
+            # y_value = torch.cat((y_reduction,epsilon,delta),dim=-1) # [n_init, num_tiles+2]#2/11/2026 for new composite to control epsilon behavior
+            # y_value = torch.cat((y_reduction,delta),dim=-1) # test linear form 02/12/2026 pb
+            #logging.info(f'Initial intermediate outputs (patch, delta) for EICF: {y_value}') # test linear form 02/12/2026 pb
+
+
+            logging.info(f'Using pixelSSE = patchSSE*epsilon + delta composite form!')
             epsilon, delta = solve(pixelLoss, reductionLoss) #2/11/2026 for new composite to control epsilon behavior
-            y_value = torch.cat((y_reduction,epsilon,delta),dim=-1) # [n_init, num_tiles+2]#2/11/2026 for new composite to control epsilon behavior
-            logging.info(f'Initial intermediate outputs (patch, epsilon, delta) for EICF: {y_value}')            
-            # y_value = torch.cat((y_reduction,torch.log(delta)),dim=-1) # [n_init, num_tiles+1] (02/03/2026 use log for delta)
+            y_value = torch.cat((y_reduction,torch.log(epsilon),delta),dim=-1) # 02/17/2026 use log for epsilon
+            logging.info(f'Initial intermediate outputs (patch, log(epsilon), delta) for EICF: {y_value}') 
             
         obj = -1*pixelLoss # maximization direction
         best_val = obj.max() # tensor
@@ -298,25 +286,19 @@ def run_one_trial(
         # calculate reduction intermediate outputs for EICF
         if algo=='EICF':
             y_reduction = problem.reduction_func(image_temp).to(device)*problem.scaling_factor.to(device=device) #modified 01/30/2026 # [num_tiles,]
-            # reductionLoss = loss_func(y_simu=y_reduction.unsqueeze(0)*problem.scaling_factor.to(device=device),
-            #                         y_true=reduction_true *problem.scaling_factor.to(device=device),
-            #                         reduce=False).unsqueeze(0) # [1,]
             reductionLoss = loss_func(y_simu=y_reduction.unsqueeze(0),
                                     y_true=reduction_true,
-                                    reduce=False).unsqueeze(0) # [1,] modified 01/30/2026
-            #logger.info(f'y_reduction shape: {y_reduction.shape}')
-            # epsilon = pixelLoss[-1] - reductionLoss #20250903
-            # delta = torch.Tensor(safe_division(pixelLoss[-1], reductionLoss,
-            #                                    threshold=problem.safe_div_th_cnst[0],
-            #                                    high_value=problem.safe_div_th_cnst[1])).to(device=device)
-            # delta = new_Loss / (reductionLoss + 1e-10) # avoid division by zero modified 01/30/2026
+                                    reduce=False).unsqueeze(0) # [1,] 02/17/2026
+
+            # the following is for linear form
+            # delta = new_Loss - reductionLoss
+            # y_temp = torch.cat((y_reduction.unsqueeze(0),delta),dim=-1) # 02/17/2026 use delta form
+            # logging.info(f"y_temp (linear form) {y_temp}") # 02/17/2026 use delta form
+
+            # the following is for composite form pixel=patch*exp(log(epsilon))+delta
             epsilon, delta = solve(new_Loss, reductionLoss) #2/11/2026 for new composite to control epsilon behavior
-            #delta: multiplier to make patch SSE -> pixel SSE.
-            #logger.info(f'delta shape: {delta.shape}')
-            # y_temp = torch.cat((y_reduction.unsqueeze(0),torch.log(delta)),dim=-1) # [1,num_tiles+1] #02/03/2026 use log for delta
-            # logger.info(f"y_temp (log for the last one) {y_temp}")
-            y_temp = torch.cat((y_reduction.unsqueeze(0),epsilon,delta),dim=-1) # [1,num_tiles+2]#2/11/2026 for new composite to control epsilon behavior
-            logging.info(f"y_temp (new composite form) {y_temp}")
+            y_temp = torch.cat((y_reduction.unsqueeze(0),torch.log(epsilon),delta),dim=-1) #02/17/2026 use log for epsilon
+            logging.info(f"y_temp (patch, log(epsilon), delta) {y_temp}")
             y_value = torch.cat((y_value,y_temp),dim=0)
         
         # Display and save results
@@ -335,12 +317,14 @@ def run_one_trial(
         logger.info(f"Suggested point: {new_x.cpu().numpy()}")
         logger.info(f"new pixel Loss value (no minus): {new_Loss.cpu().numpy()}")
         if algo not in ['EI','KG','Random','TS']:
-            logger.info(f"Evaluated multi-output value (patch, epsilon, delta): {y_temp}")
+            # logger.info(f"Evaluated multi-output value (patch, epsilon, delta): {y_temp}")
+            logger.info(f"Evaluated multi-output value (patch, delta): {y_temp}") # test linear form 02/12/2026 pb
         # logger.info(f"Best iteration index found: {best_idx+1}")  
         logger.info(f"Best point found: {best_params}")
         logger.info(f"Best objective function value (pixelSSE) found: {best_val}")
         logger.info(f"==========================================================")
         if algo == 'EICF':
+            train_Y = y_value
             BO_results = {
                 "max_iter": max_iter,
                 "acqf_runtime": acqf_runtime,
@@ -359,6 +343,7 @@ def run_one_trial(
                 },
             }
         else:
+            train_Y = obj
             BO_results = {
                 "max_iter": max_iter,
                 "acqf_runtime": acqf_runtime,
