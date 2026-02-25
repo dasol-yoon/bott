@@ -292,15 +292,35 @@ def safe_division(dividend, divisor,threshold=0.2, high_value=200):
     return quotient
 
 
-def add_poisson_noise(image, peak=100.0):
+import torch
+
+def add_poisson_noise(image, peak=100):
     """
-    image: torch.Tensor (float), values in [0,1]
-    peak: max photon count (controls noise level)
+    image: torch.Tensor (any range, must be non-negative)
+    peak: max photon count for brightest pixel
     """
     torch.manual_seed(42)
     random.seed(42)
     np.random.seed(42)
-    image_scaled = image * peak          # convert to counts
-    noisy = torch.poisson(image_scaled)  # apply Poisson
-    noisy = noisy / peak                 # scale back
+    image = torch.clamp(image, min=0) #no negative values
+
+    # get original range of the image
+    min_val = image.min()
+    max_val = image.max()
+
+    # normalize to [0,1]
+    image_norm = (image - min_val) / (max_val - min_val + 1e-12)
+
+    # scale to photon counts
+    image_scaled = image_norm * peak
+
+    # apply Poisson noise
+    noisy_scaled = torch.poisson(image_scaled.cpu()).to(image.device)
+
+    # scale back to [0,1]
+    noisy_norm = noisy_scaled / peak
+
+    # rescale to original range
+    noisy = noisy_norm * (max_val - min_val) + min_val
+
     return noisy
