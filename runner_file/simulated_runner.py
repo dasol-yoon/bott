@@ -65,9 +65,6 @@ def main(
         if torch.cuda.is_available():
             torch.cuda.manual_seed_all(seed)
 
-        torch.use_deterministic_algorithms(True)
-        torch.backends.cudnn.deterministic = True
-        torch.backends.cudnn.benchmark = False
         logger.info(f'domain knowledge 5 segment tile experiment. Branch Multiplied scale factor test')
 
         params_abTEM = {#todo: find a better way to enter parameters
