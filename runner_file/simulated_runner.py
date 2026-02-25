@@ -1,7 +1,8 @@
 #edited 20250513 cluster
 import sys
 from pathlib import Path
-
+import random
+import numpy as np
 # Ensure project root is on PYTHONPATH so "bott" can be imported when run from run_job/ or via SLURM
 _project_root = Path(__file__).resolve().parent.parent
 if str(_project_root) not in sys.path:
@@ -56,6 +57,17 @@ def main(
         Returns:
             None.
         """
+        seed = 42
+        random.seed(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(seed)
+
+        torch.use_deterministic_algorithms(True)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
         logger.info(f'domain knowledge 5 segment tile experiment. Branch Multiplied scale factor test')
 
         params_abTEM = {#todo: find a better way to enter parameters
