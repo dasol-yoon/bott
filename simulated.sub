@@ -15,8 +15,9 @@ algo=$2
 num_iter=$3
 param1=$4
 n_init_evals=$5
+noisy_ground_truth_peak=$6
 
-echo "Running trial $trial with algo $algo, num_iter $num_iter, n_init_evals $n_init_evals"
+echo "Running trial $trial with algo $algo, num_iter $num_iter, n_init_evals $n_init_evals, noisy_ground_truth_peak $noisy_ground_truth_peak"
 echo "param_truth: ($param1)"
 
 /home/pb482/miniconda3/envs/bott/bin/python /home/pb482/bott/runner_file/simulated_runner.py \
@@ -24,4 +25,5 @@ echo "param_truth: ($param1)"
     --algo $algo \
     --num_iter $num_iter \
     --param_truth $param1 \
-    --n_init_evals $n_init_evals
+    --n_init_evals $n_init_evals \
+    --noisy_ground_truth_peak $noisy_ground_truth_peak

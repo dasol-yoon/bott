@@ -46,14 +46,15 @@ def solve(pixelSSE_val, patchSSE_val):
     device = pixelSSE_val.device
     dtype  = pixelSSE_val.dtype
 
+    #TODO: Always check if the bounds are correct for the configuration you are using.
     # bounds from |ln eps| <= 1
-    # eps_min = torch.exp(torch.tensor(-1.0, device=device, dtype=dtype))
-    # eps_max = torch.exp(torch.tensor( 1.0, device=device, dtype=dtype))
+    eps_min = torch.exp(torch.tensor(-1.0, device=device, dtype=dtype))
+    eps_max = torch.exp(torch.tensor( 1.0, device=device, dtype=dtype))
 
     # # bounds from |log10 eps| <= 1
     # logging.info(f'bounds from |log10 eps| <= 1')
-    eps_min = torch.pow(10.0, torch.tensor(-1.0, device=device, dtype=dtype))
-    eps_max = torch.pow(10.0, torch.tensor( 1.0, device=device, dtype=dtype))
+    # eps_min = torch.pow(10.0, torch.tensor(-1.0, device=device, dtype=dtype))
+    # eps_max = torch.pow(10.0, torch.tensor( 1.0, device=device, dtype=dtype))
 
     epsilon = torch.empty_like(pixelSSE_val)
     delta   = torch.empty_like(pixelSSE_val)
@@ -101,6 +102,7 @@ def run_one_trial(
         device_botorch: str='cpu',
         force_restart:Optional[bool]= False,
         manual_init_evals = None,
+        ground_truth_original = None,
 )-> None:
     '''Run one trial of BO loop for the given problem (tile pattern) and algorithm
 
@@ -137,10 +139,11 @@ def run_one_trial(
     params_abTEM = problem.params_abtem
 
     if objective is None:
-
+        #TODO: Always check if the bounds are correct for the configuration you are using.
         logger.info(f'Using {problem.scaling_factor} as scaling factor for the objective -- Multiplication Place Changed')
-        logging.info(f'Using pixelSSE = patchSSE*epsilon + delta composite form!')
-        objective = GenericMCObjective(lambda Y, X=None: -1*((loss_func(Y[...,:-2].to(device), reduction_true.to(device),reduce=True)*torch.exp(Y[...,-2])+Y[...,-1])) )#for pixel=patch*exp(log(epsilon))+delta form 02/17/2026 pb
+        logging.info(f'Using pixelSSE = patchSSE*epsilon + delta composite form! (log(epsilon) -> epsilon)')
+        # objective = GenericMCObjective(lambda Y, X=None: -1*((loss_func(Y[...,:-2].to(device), reduction_true.to(device),reduce=True)*torch.exp(Y[...,-2])+Y[...,-1])) )#for pixel=patch*exp(log(epsilon))+delta form 02/17/2026 pb
+        objective = GenericMCObjective(lambda Y, X=None: -1*((loss_func(Y[...,:-2].to(device), reduction_true.to(device),reduce=True)*Y[...,-2]+Y[...,-1])) )#for pixel=patch*epsilon+delta form 02/25/2026 pb
         # logging.info(f'Using test linear form for the objective 2/12/2026')
         # objective = GenericMCObjective(lambda Y, X=None: -1*((loss_func(Y[...,:-1].to(device), reduction_true.to(device),reduce=True))+Y[...,-1])) # test linear form 02/12/2026 pb
     
@@ -211,6 +214,7 @@ def run_one_trial(
         logging.info(f'Initial pixelLoss: {pixelLoss}')
         # calculate reduction intermediate outputs for EICF in batch
         if algo=='EICF':
+            #TODO: Always check if the bounds are correct for the configuration you are using. (min, max of epsilon)
             y_reduction = (problem.reduction_func(image_output).to(device))*problem.scaling_factor.to(device) #01/30/2026 added scaling factor
             logging.info(f'y_reduction {y_reduction}')
             reductionLoss = loss_func(y_simu=y_reduction,
@@ -223,11 +227,12 @@ def run_one_trial(
             # y_value = torch.cat((y_reduction,delta),dim=-1) # test linear form 02/12/2026 pb
             #logging.info(f'Initial intermediate outputs (patch, delta) for EICF: {y_value}') # test linear form 02/12/2026 pb
 
-
-            logging.info(f'Using pixelSSE = patchSSE*epsilon + delta composite form!')
+            logging.info(f'(before acqf opt) Using pixelSSE = patchSSE*epsilon + delta composite form! (log(epsilon) -> epsilon)')
             epsilon, delta = solve(pixelLoss, reductionLoss) #2/11/2026 for new composite to control epsilon behavior
-            y_value = torch.cat((y_reduction,torch.log(epsilon),delta),dim=-1) # 02/17/2026 use log for epsilon
-            logging.info(f'Initial intermediate outputs (patch, log(epsilon), delta) for EICF: {y_value}') 
+            # y_value = torch.cat((y_reduction,torch.log(epsilon),delta),dim=-1) # 02/17/2026 use log for epsilon
+            y_value = torch.cat((y_reduction,epsilon,delta),dim=-1) # 02/25/2026 use epsilon for epsilon
+            # logging.info(f'Initial intermediate outputs (patch, log(epsilon), delta) for EICF: {y_value}') 
+            logging.info(f'Initial intermediate outputs (patch, epsilon, delta) for EICF: {y_value}') 
             
         obj = -1*pixelLoss # maximization direction
         best_val = obj.max() # tensor
@@ -285,6 +290,8 @@ def run_one_trial(
 
         # calculate reduction intermediate outputs for EICF
         if algo=='EICF':
+            #TODO: Always check if the bounds are correct for the configuration you are using.
+            logging.info(f'(after acqf opt) Using pixelSSE = patchSSE*epsilon + delta composite form! (log(epsilon) -> epsilon)')
             y_reduction = problem.reduction_func(image_temp).to(device)*problem.scaling_factor.to(device=device) #modified 01/30/2026 # [num_tiles,]
             reductionLoss = loss_func(y_simu=y_reduction.unsqueeze(0),
                                     y_true=reduction_true,
@@ -297,8 +304,10 @@ def run_one_trial(
 
             # the following is for composite form pixel=patch*exp(log(epsilon))+delta
             epsilon, delta = solve(new_Loss, reductionLoss) #2/11/2026 for new composite to control epsilon behavior
-            y_temp = torch.cat((y_reduction.unsqueeze(0),torch.log(epsilon),delta),dim=-1) #02/17/2026 use log for epsilon
-            logging.info(f"y_temp (patch, log(epsilon), delta) {y_temp}")
+            # y_temp = torch.cat((y_reduction.unsqueeze(0),torch.log(epsilon),delta),dim=-1) #02/17/2026 use log for epsilon
+            y_temp = torch.cat((y_reduction.unsqueeze(0),epsilon,delta),dim=-1) #02/25/2026 use epsilon for epsilon
+            # logging.info(f"y_temp (patch, log(epsilon), delta) {y_temp}")
+            logging.info(f"y_temp (patch, epsilon, delta) {y_temp}")
             y_value = torch.cat((y_value,y_temp),dim=0)
         
         # Display and save results
@@ -326,6 +335,8 @@ def run_one_trial(
         if algo == 'EICF':
             train_Y = y_value
             BO_results = {
+                "ground_truth":problem.measurement_true,
+                'ground_truth_original':ground_truth_original,
                 "max_iter": max_iter,
                 "acqf_runtime": acqf_runtime,
                 "gp_runtime": gp_runtime,
@@ -345,6 +356,8 @@ def run_one_trial(
         else:
             train_Y = obj
             BO_results = {
+                "ground_truth":problem.measurement_true,
+                'ground_truth_original':ground_truth_original,
                 "max_iter": max_iter,
                 "acqf_runtime": acqf_runtime,
                 "gp_runtime": gp_runtime,
@@ -422,6 +435,7 @@ def parse():
     parser.add_argument("--algo", "-a", type=str, default="EI")
     parser.add_argument("--num_iter", "-n", type=int, default=50)
     parser.add_argument("--n_init_evals", "-ni", type=int, default=7)
+    parser.add_argument("--noisy_ground_truth_peak", "-np", type=float, default=None)
     grp = parser.add_mutually_exclusive_group(required=True)
     grp.add_argument('--param_truth', "-p", type=float, nargs=3, help='Three param truth values')
     grp.add_argument('--param_truth_path', "-f", type=str, help='path to the ground truth image')

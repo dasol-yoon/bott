@@ -2,7 +2,7 @@
 import numpy as np
 import torch
 from time import perf_counter
-
+import random
 def create_circular_mask(
     height: int,
     width: int,
@@ -290,3 +290,17 @@ def safe_division(dividend, divisor,threshold=0.2, high_value=200):
     quotient[mask] = dividend[mask] / divisor[mask]
     quotient[~mask] = high_value
     return quotient
+
+
+def add_poisson_noise(image, peak=100.0):
+    """
+    image: torch.Tensor (float), values in [0,1]
+    peak: max photon count (controls noise level)
+    """
+    torch.manual_seed(42)
+    random.seed(42)
+    np.random.seed(42)
+    image_scaled = image * peak          # convert to counts
+    noisy = torch.poisson(image_scaled)  # apply Poisson
+    noisy = noisy / peak                 # scale back
+    return noisy

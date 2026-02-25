@@ -1,7 +1,4 @@
 #edited 20250513 cluster
-import logging
-import warnings
-
 import sys
 from pathlib import Path
 
@@ -10,6 +7,9 @@ _project_root = Path(__file__).resolve().parent.parent
 if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
+import logging
+import warnings
+from bott.utils import add_poisson_noise
 import torch
 from botorch.exceptions import InputDataWarning
 
@@ -38,7 +38,7 @@ def main(
         num_iter: int,
         n_init_evals: int,
         param_truth: str | list[float],
-        noisy_ground_truth_std: float | None = None,
+        noisy_ground_truth_peak: float | None = None,
         manual_init_evals: list[list[float]] | None = None,
 ) -> None: 
         """Run one replication for the dropwave function network test problem
@@ -50,7 +50,9 @@ def main(
             param1: Thickness
             param2: Tilt-x
             param3: Tilt-y
-
+            noisy_ground_truth_peak: max photon count (controls noise level)
+            manual_init_evals: list of lists of initial evaluation points
+            
         Returns:
             None.
         """
@@ -111,16 +113,22 @@ def main(
               ground_truth = torch.Tensor(simulate_cbed(param_truth[0],param_truth[1],
                                                   param_truth[2], params_abTEM,
                                                   device_simu='gpu')) # abtem takes "cpu" or "gpu"
-              problem_name = f"GT_{param_truth[0]}_{param_truth[1]}_{param_truth[2]}_newcomposite_logepsilon_bound10_feb17"
+              problem_name = f"GT_{param_truth[0]}_{param_truth[1]}_{param_truth[2]}_newcomposite_bound_e_Feb25"
         else:
               raise ValueError("param_truth should be a list of 3 floats or a string path to the image.")
-        if noisy_ground_truth_std is not None:
-            logger.info(f"Considering noisy ground truth with std {noisy_ground_truth_std}")
-            ground_truth = ground_truth + torch.normal(0,noisy_ground_truth_std,size=ground_truth.shape)
-            is_noisy_ground_truth = f"noisy_{noisy_ground_truth_std}"
+        if noisy_ground_truth_peak is not None:
+            ground_truth_original = ground_truth.clone()
+            logger.info(f"Considering noisy ground truth with peak {noisy_ground_truth_peak}")
+            logger.info(f"ground_truth max and min before adding noise: {torch.max(ground_truth)}, {torch.min(ground_truth)} with shape {ground_truth.shape}")
+            ground_truth = add_poisson_noise(image=ground_truth, peak=noisy_ground_truth_peak)
+            logger.info(f"ground_truth max and min after adding noise: {torch.max(ground_truth)}, {torch.min(ground_truth)} with shape {ground_truth.shape}")
+            is_noisy_ground_truth = f"noisy_{noisy_ground_truth_peak}"
+            problem_name = problem_name + f"_noisy_{noisy_ground_truth_peak}"
         else:
+            ground_truth_original = ground_truth.clone()
             logger.info("No noisy ground truth considered")
             is_noisy_ground_truth = "nonoise"
+            problem_name = problem_name + f"_nonoise"
         sf_quad = 4303
         sf_cent = 7440
         temp = torch.Tensor([sf_cent, sf_quad, sf_quad, sf_quad, sf_quad])
@@ -153,6 +161,7 @@ def main(
                     dtype=torch.float64,
                     device_botorch=device,
                     manual_init_evals = manual_init_evals,
+                    ground_truth_original = ground_truth_original,
                     )
         else:
             run_one_trial(problem_name=problem_name+'_SSE_dppow1_noNorm_init'+str(n_init_evals)+'_'+is_noisy_ground_truth, 
@@ -163,7 +172,8 @@ def main(
                     max_iter=num_iter, 
                     objective=None,
                     dtype=torch.float64,
-                    device_botorch=device
+                    device_botorch=device,  
+                    ground_truth_original = ground_truth_original,
                     )
 
 

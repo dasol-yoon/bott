@@ -1,8 +1,8 @@
 #!/bin/sh
 
-for trial in $(seq 1 1 20)
+for trial in $(seq 1 1 1)
 do
-    for algo in EICF 
+    for algo in EICF EI
     do
         for num_iter in 50
         do
@@ -10,11 +10,14 @@ do
             do
                 for n_init_evals in 7
                 do
-                    sbatch -J run0_${trial}_${algo} \
-                        -o ./logs/${trial}_${algo}_%j.out \
-                            -e ./logs/${trial}_${algo}_%j.err \
-                            --requeue simulated.sub ${trial} ${algo} ${num_iter} "$param_truth" ${n_init_evals}
-                        sleep 0.1s
+                    for noisy_ground_truth_peak in 20 
+                    do
+                    sbatch -J run0_${trial}_${algo}_${noisy_ground_truth_peak} \
+                        -o ./logs/Tri_${trial}_Alg_${algo}_noisy_${noisy_ground_truth_peak}_%j.out \
+                            -e ./logs/Tri_${trial}_Alg_${algo}_noisy_${noisy_ground_truth_peak}_%j.err \
+                            --requeue simulated.sub ${trial} ${algo} ${num_iter} "$param_truth" ${n_init_evals} ${noisy_ground_truth_peak}
+                            sleep 0.1s
+                        done
                 done
             done
         done
