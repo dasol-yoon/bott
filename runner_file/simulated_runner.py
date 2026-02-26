@@ -122,10 +122,10 @@ def main(
               ground_truth = torch.Tensor(simulate_cbed(param_truth[0],param_truth[1],
                                                   param_truth[2], params_abTEM,
                                                   device_simu='gpu')) # abtem takes "cpu" or "gpu"
-              problem_name = f"GT_{param_truth[0]}_{param_truth[1]}_{param_truth[2]}_newcomposite_bound_e_Feb25"
+              problem_name = f"GT_{param_truth[0]}_{param_truth[1]}_{param_truth[2]}_newcomposite_bound_10_clipped_Feb26"
         else:
               raise ValueError("param_truth should be a list of 3 floats or a string path to the image.")
-        if noisy_ground_truth_peak is not None:
+        if noisy_ground_truth_peak is not None and noisy_ground_truth_peak > 0:
             ground_truth_original = ground_truth.clone()
             logger.info(f"Considering noisy ground truth with peak {noisy_ground_truth_peak}")
             logger.info(f"ground_truth max and min before adding noise: {torch.max(ground_truth)}, {torch.min(ground_truth)} with shape {ground_truth.shape}")
