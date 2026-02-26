@@ -48,13 +48,13 @@ def solve(pixelSSE_val, patchSSE_val):
 
     #TODO: Always check if the bounds are correct for the configuration you are using.
     # bounds from |ln eps| <= 1
-    eps_min = torch.exp(torch.tensor(-1.0, device=device, dtype=dtype))
-    eps_max = torch.exp(torch.tensor( 1.0, device=device, dtype=dtype))
+    # eps_min = torch.exp(torch.tensor(-1.0, device=device, dtype=dtype))
+    # eps_max = torch.exp(torch.tensor( 1.0, device=device, dtype=dtype))
 
     # # bounds from |log10 eps| <= 1
     # logging.info(f'bounds from |log10 eps| <= 1')
-    # eps_min = torch.pow(10.0, torch.tensor(-1.0, device=device, dtype=dtype))
-    # eps_max = torch.pow(10.0, torch.tensor( 1.0, device=device, dtype=dtype))
+    eps_min = torch.pow(10.0, torch.tensor(-1.0, device=device, dtype=dtype))
+    eps_max = torch.pow(10.0, torch.tensor( 1.0, device=device, dtype=dtype))
 
     epsilon = torch.empty_like(pixelSSE_val)
     delta   = torch.empty_like(pixelSSE_val)
@@ -141,9 +141,10 @@ def run_one_trial(
     if objective is None:
         #TODO: Always check if the bounds are correct for the configuration you are using.
         logger.info(f'Using {problem.scaling_factor} as scaling factor for the objective -- Multiplication Place Changed')
-        logging.info(f'Using pixelSSE = patchSSE*epsilon + delta composite form! (log(epsilon) -> epsilon)')
+        logging.info(f'Using pixelSSE = patchSSE*epsilon + delta composite form! (log(epsilon) -> epsilon) with epsilon clipped to [0.1, 10]')
         # objective = GenericMCObjective(lambda Y, X=None: -1*((loss_func(Y[...,:-2].to(device), reduction_true.to(device),reduce=True)*torch.exp(Y[...,-2])+Y[...,-1])) )#for pixel=patch*exp(log(epsilon))+delta form 02/17/2026 pb
-        objective = GenericMCObjective(lambda Y, X=None: -1*((loss_func(Y[...,:-2].to(device), reduction_true.to(device),reduce=True)*Y[...,-2]+Y[...,-1])) )#for pixel=patch*epsilon+delta form 02/25/2026 pb
+        # objective = GenericMCObjective(lambda Y, X=None: -1*((loss_func(Y[...,:-2].to(device), reduction_true.to(device),reduce=True)*Y[...,-2]+Y[...,-1])) )#for pixel=patch*epsilon+delta form 02/25/2026 pb
+        objective = GenericMCObjective(lambda Y, X=None: -1*((loss_func(Y[...,:-2].to(device), reduction_true.to(device),reduce=True)*torch.clamp(Y[...,-2], 0.1, 10)+Y[...,-1])) )
         # logging.info(f'Using test linear form for the objective 2/12/2026')
         # objective = GenericMCObjective(lambda Y, X=None: -1*((loss_func(Y[...,:-1].to(device), reduction_true.to(device),reduce=True))+Y[...,-1])) # test linear form 02/12/2026 pb
     
