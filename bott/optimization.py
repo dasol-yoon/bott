@@ -48,13 +48,13 @@ def solve(pixelSSE_val, patchSSE_val):
 
     #TODO: Always check if the bounds are correct for the configuration you are using.
     # bounds from |ln eps| <= 1
-    # eps_min = torch.exp(torch.tensor(-1.0, device=device, dtype=dtype))
-    # eps_max = torch.exp(torch.tensor( 1.0, device=device, dtype=dtype))
+    eps_min = torch.exp(torch.tensor(-1.0, device=device, dtype=dtype))
+    eps_max = torch.exp(torch.tensor( 1.0, device=device, dtype=dtype))
 
     # # bounds from |log10 eps| <= 1
     # logging.info(f'bounds from |log10 eps| <= 1')
-    eps_min = torch.pow(10.0, torch.tensor(-1.0, device=device, dtype=dtype))
-    eps_max = torch.pow(10.0, torch.tensor( 1.0, device=device, dtype=dtype))
+    # eps_min = torch.pow(10.0, torch.tensor(-1.0, device=device, dtype=dtype))
+    # eps_max = torch.pow(10.0, torch.tensor( 1.0, device=device, dtype=dtype))
 
     epsilon = torch.empty_like(pixelSSE_val)
     delta   = torch.empty_like(pixelSSE_val)
@@ -207,6 +207,11 @@ def run_one_trial(
         outputs_np = np.array([problem.get_physics_simu(*param,params_abtem_alt=params_abTEM,device_alt=problem.device) for param in input_params])
         image_output = torch.tensor(outputs_np, dtype=dtype, device=device)
         logger.info(f"image output shape {image_output.shape}")
+        # Normalize the image output 2/28/2026 pb
+        sums = image_output.sum(dim=(1, 2), keepdim=True)
+        image_output = image_output / sums
+        logger.info(f'Normalized image output applied: max {torch.max(image_output)}, min {torch.min(image_output)}')  
+
         # if noisy: # TODO The noise on PACBED is better described by Poisson
         #     image_output = image_output + torch.normal(0,1,size=image_output.shape)
     
@@ -281,6 +286,9 @@ def run_one_trial(
         image_temp = torch.from_numpy(problem.get_physics_simu(*input_param,params_abtem_alt=params_abTEM,device_alt=problem.device)).to(dtype=dtype, device=device)
         time_simu_end = time_sync()
         physics_model_runtime.append(time_simu_end-time_simu_start)
+        # Normalize the image output 2/28/2026 pb
+        image_temp = image_temp / image_temp.sum()
+        logger.info(f'(in the loop) Normalized image output applied: max {torch.max(image_temp)}, min {torch.min(image_temp)}')  
         # image_output = torch.cat((image_output, image_temp.unsqueeze(0)),dim=0) # This will continue to concat new images but image_output is never used. We should remove this unless it's needed somewhere else.
         # image_t = Image.fromarray(image_temp.cpu().numpy()) #20250520 #01/30/2026 removed -- not saving images anymore
         # image_t.save(image_dir+make_output_filenm(input_param)) #20250520 #01/30/2026 removed -- not saving images anymore
