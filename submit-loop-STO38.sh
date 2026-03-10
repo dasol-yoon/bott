@@ -1,16 +1,16 @@
 #!/bin/sh
 
-for trial in $(seq 2 1 20)
+for trial in $(seq 16 1 16)
 do
-    for algo in EI EICF KG Random
+    for algo in KG
     do
         for num_iter in 50
         do
             for n_init_evals in 7
             do
-                sbatch -J STO_${trial}_${algo} \
-                    -o ./logs/${trial}_${algo}_%j.out \
-                        -e ./logs/${trial}_${algo}_%j.err \
+                sbatch -J STO38_${trial}_${algo} \
+                    -o ./logs/STO38_Tri_${trial}_${algo}_%j.out \
+                        -e ./logs/STO38_Tri_${trial}_${algo}_%j.err \
                         --requeue STO38.sub ${trial} ${algo} ${num_iter} ${n_init_evals}
                     sleep 0.1s
             done

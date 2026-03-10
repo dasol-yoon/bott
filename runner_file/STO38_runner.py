@@ -39,6 +39,7 @@ def main(
         n_init_evals: int,
         param_truth: str | list[float],
         manual_init_evals: list[list[float]] | None = None,
+        noisy_ground_truth_peak: float | None = None,
 ) -> None: 
         """Run one replication for the dropwave function network test problem
 
@@ -104,8 +105,10 @@ def main(
                                           (imgshape[0]/originshape[0], 
                                            imgshape[1]/originshape[1]), order=3)
               ground_truth = torch.Tensor(ground_truth)
-
-              problem_name = f"EXP_STO38_domain_38"
+               # Normalize the image output 2/28/2026 pb
+              ground_truth = ground_truth / ground_truth.sum()
+              logging.info(f'ground_truth max and min after normalization {torch.max(ground_truth)}, {torch.min(ground_truth)}')    
+              problem_name = f"EXP_STO38_domain_38_epsilon_e"
 
         elif isinstance(param_truth, list):
               ground_truth = torch.Tensor(simulate_cbed(param_truth[0],param_truth[1],

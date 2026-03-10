@@ -8,7 +8,8 @@
 #SBATCH --time=24:00:00
 #SBATCH --partition=default_partition        # Request partition
 #SBATCH --gres=gpu:1                  # Type/number of GPUs needed
-#SBATCH --exclude=jjs533-compute-03,lil-compute-05,bhattacharjee-compute-02 
+#SBATCH --mem=32GB
+#SBATCH --exclude=jjs533-compute-03,lil-compute-05,bhattacharjee-compute-02,unicorn-compute-05 
 
 # Parse arguments
 param1='/home/pb482/bott/data/STO28nm_1_1.5mrad_mag.tiff'
