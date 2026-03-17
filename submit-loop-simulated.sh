@@ -1,8 +1,8 @@
 #!/bin/sh
 
-for trial in $(seq 11 1 11)
+for trial in $(seq 6 1 6)
 do
-    for algo in KG
+    for algo in EICF
     do
         for num_iter in 50
         do

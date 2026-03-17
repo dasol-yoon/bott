@@ -48,13 +48,13 @@ def solve(pixelSSE_val, patchSSE_val):
 
     #TODO: Always check if the bounds are correct for the configuration you are using.
     # bounds from |ln eps| <= 1
-    eps_min = torch.exp(torch.tensor(-1.0, device=device, dtype=dtype))
-    eps_max = torch.exp(torch.tensor( 1.0, device=device, dtype=dtype))
+    # eps_min = torch.exp(torch.tensor(-1.0, device=device, dtype=dtype))
+    # eps_max = torch.exp(torch.tensor( 1.0, device=device, dtype=dtype))
 
     # # bounds from |log10 eps| <= 1
     # logging.info(f'bounds from |log10 eps| <= 1')
-    # eps_min = torch.pow(10.0, torch.tensor(-1.0, device=device, dtype=dtype))
-    # eps_max = torch.pow(10.0, torch.tensor( 1.0, device=device, dtype=dtype))
+    eps_min = torch.pow(10.0, torch.tensor(-1.0, device=device, dtype=dtype))
+    eps_max = torch.pow(10.0, torch.tensor( 1.0, device=device, dtype=dtype))
 
     epsilon = torch.empty_like(pixelSSE_val)
     delta   = torch.empty_like(pixelSSE_val)
