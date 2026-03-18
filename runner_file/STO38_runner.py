@@ -55,7 +55,7 @@ def main(
             None.
         """
         logger.info(f'domain knowledge 5 segment tile experiment. Branch Multiplied scale factor test')
-
+        overall_scaling_factor = 1000
         params_abTEM = {#todo: find a better way to enter parameters
                 # # Device configuration
                 # "device_abtem": 'gpu',#"cpu",
@@ -104,7 +104,7 @@ def main(
               ground_truth = ndimage.zoom(ground_truth, 
                                           (imgshape[0]/originshape[0], 
                                            imgshape[1]/originshape[1]), order=3)
-              ground_truth = torch.Tensor(ground_truth)
+              ground_truth = torch.Tensor(ground_truth)*overall_scaling_factor
                # Normalize the image output 2/28/2026 pb
               ground_truth = ground_truth / ground_truth.sum()
               logging.info(f'ground_truth max and min after normalization {torch.max(ground_truth)}, {torch.min(ground_truth)}')    
@@ -113,7 +113,7 @@ def main(
         elif isinstance(param_truth, list):
               ground_truth = torch.Tensor(simulate_cbed(param_truth[0],param_truth[1],
                                                   param_truth[2], params_abTEM,
-                                                  device_simu='gpu')) # abtem takes "cpu" or "gpu"
+                                                  device_simu='gpu'))*overall_scaling_factor # abtem takes "cpu" or "gpu"
               problem_name = f"GT_{param_truth[0]}_{param_truth[1]}_{param_truth[2]}"
         else:
               raise ValueError("param_truth should be a list of 3 floats or a string path to the image.")
@@ -138,7 +138,8 @@ def main(
                                     device=device,
                                     params_abtem = params_abTEM,
                                     scale_factor=sf_domain5seg,
-                                    safe_div_th_cnst = [0.2,200]
+                                    safe_div_th_cnst = [0.2,200],
+                                    overall_scaling_factor = overall_scaling_factor
                                     ) # "cpu" or "cuda" for physics simulation
         if manual_init_evals is not None:
             run_one_trial(problem_name=problem_name+'_noNorm_manual'+str(len(manual_init_evals)), 

@@ -36,12 +36,13 @@ class OptimizationProblem(SyntheticTestFunction):
                  params_abtem=None,
                  scale_factor = None,
                  safe_div_th_cnst = [0.2,200],
-                 scan_coords=None) -> None: # noise_std somehow has no effect when it's < 1, very weird
+                 scan_coords=None,
+                 overall_scaling_factor = 1) -> None: # noise_std somehow has no effect when it's < 1, very weird
         self.dtype = dtype
         self.device = device
         self.norm_arr = norm_arr
         self.params_abtem = params_abtem
-
+        self.overall_scaling_factor = overall_scaling_factor
         self.dim = dim
         self._bounds = bounds
         super(OptimizationProblem, self).__init__(noise_std=noise_std, negate=False, bounds=self._bounds) # This has no effect unless specifically called as `get_objective(X, noisy_objective=True)`

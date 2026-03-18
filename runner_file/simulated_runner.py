@@ -105,6 +105,7 @@ def main(
                 "return_pacbed": True,
             }
         print_system_info()
+        overall_scaling_factor = 1000
         #todo: make it into a function and put it in io.py
         if isinstance(param_truth, str):
               ground_truth = load_img(param_truth)
@@ -115,13 +116,13 @@ def main(
               ground_truth = ndimage.zoom(ground_truth, 
                                           (imgshape[0]/originshape[0], 
                                            imgshape[1]/originshape[1]), order=3)
-              ground_truth = torch.Tensor(ground_truth)
+              ground_truth = torch.Tensor(ground_truth)*overall_scaling_factor
               problem_name = f"domain_5seg_mult_factor_obj_adj_newcomposite"
 
         elif isinstance(param_truth, list):
               ground_truth = torch.Tensor(simulate_cbed(param_truth[0],param_truth[1],
                                                   param_truth[2], params_abTEM,
-                                                  device_simu='gpu')) # abtem takes "cpu" or "gpu"
+                                                  device_simu='gpu'))*overall_scaling_factor # abtem takes "cpu" or "gpu"
               problem_name = f"GT_{param_truth[0]}_{param_truth[1]}_{param_truth[2]}_newcomposite_bound_10_clipped_Feb26"
         else:
               raise ValueError("param_truth should be a list of 3 floats or a string path to the image.")
@@ -157,7 +158,8 @@ def main(
                                     device=device,
                                     params_abtem = params_abTEM,
                                     scale_factor=sf_domain5seg,
-                                    safe_div_th_cnst = [0.2,200]
+                                    safe_div_th_cnst = [0.2,200],
+                                    overall_scaling_factor = overall_scaling_factor
                                     ) # "cpu" or "cuda" for physics simulation
         if manual_init_evals is not None:
             run_one_trial(problem_name=problem_name+'_SSE_dppow1_noNorm_init'+str(n_init_evals)+'_manual'+str(len(manual_init_evals))+'_'+is_noisy_ground_truth, 
