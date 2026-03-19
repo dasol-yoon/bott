@@ -60,7 +60,7 @@ def main(
         #TODO here are parameters to change for different experiments
         overall_scaling_factor = 1000
         eps_bound = 10
-        run_date = "March18"
+        run_date = "March19"
         seed = 42
         random.seed(seed)
         np.random.seed(seed)
