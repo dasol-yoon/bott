@@ -57,6 +57,10 @@ def main(
         Returns:
             None.
         """
+        #TODO here are parameters to change for different experiments
+        overall_scaling_factor = 1000
+        eps_bound = 10
+        run_date = "March18"
         seed = 42
         random.seed(seed)
         np.random.seed(seed)
@@ -105,33 +109,35 @@ def main(
                 "return_pacbed": True,
             }
         print_system_info()
-        overall_scaling_factor = 1000
+
         #todo: make it into a function and put it in io.py
         if isinstance(param_truth, str):
-              ground_truth = load_img(param_truth)
+            ground_truth = load_img(param_truth)
 
-              imgshape = simulate_cbed(1,0,0, params_abTEM).shape
-              originshape = ground_truth.shape
-              #todo: the guide should ensure the experimental pacbed to be centered & square.
-              ground_truth = ndimage.zoom(ground_truth, 
-                                          (imgshape[0]/originshape[0], 
-                                           imgshape[1]/originshape[1]), order=3)
-              ground_truth = torch.Tensor(ground_truth)*overall_scaling_factor
-              problem_name = f"domain_5seg_mult_factor_obj_adj_newcomposite"
+            imgshape = simulate_cbed(1,0,0, params_abTEM).shape
+            originshape = ground_truth.shape
+            #todo: the guide should ensure the experimental pacbed to be centered & square.
+            ground_truth = ndimage.zoom(ground_truth, 
+                                        (imgshape[0]/originshape[0], 
+                                        imgshape[1]/originshape[1]), order=3)
+            ground_truth = torch.Tensor(ground_truth)
+            ground_truth = (ground_truth / ground_truth.sum())*overall_scaling_factor #3/18/2026 added overall scaling factor to scale up the image output
+            problem_name = f"domain_5seg_mult_factor_obj_adj_newcomposite_eps_bound_{eps_bound}"
 
         elif isinstance(param_truth, list):
-              ground_truth = torch.Tensor(simulate_cbed(param_truth[0],param_truth[1],
+            ground_truth = torch.Tensor(simulate_cbed(param_truth[0],param_truth[1],
                                                   param_truth[2], params_abTEM,
-                                                  device_simu='gpu'))*overall_scaling_factor # abtem takes "cpu" or "gpu"
-              problem_name = f"GT_{param_truth[0]}_{param_truth[1]}_{param_truth[2]}_newcomposite_bound_10_clipped_Feb26"
+                                                  device_simu='gpu')) # abtem takes "cpu" or "gpu"
+            ground_truth = (ground_truth / ground_truth.sum())*overall_scaling_factor #3/18/2026 added overall scaling factor to scale up the image output
+            problem_name = f"GT_{param_truth[0]}_{param_truth[1]}_{param_truth[2]}_newcomposite_eps_bound_{eps_bound}"
         else:
               raise ValueError("param_truth should be a list of 3 floats or a string path to the image.")
         if noisy_ground_truth_peak is not None and noisy_ground_truth_peak > 0:
             ground_truth_original = ground_truth.clone()
             logger.info(f"Considering noisy ground truth with peak {noisy_ground_truth_peak}")
-            logger.info(f"ground_truth max and min before adding noise: {torch.max(ground_truth)}, {torch.min(ground_truth)} with shape {ground_truth.shape}")
+            logger.info(f"ground_truth (max, min) before adding noise: ({torch.max(ground_truth)}, {torch.min(ground_truth)}) with shape {ground_truth.shape}")
             ground_truth = add_poisson_noise(image=ground_truth, peak=noisy_ground_truth_peak)
-            logger.info(f"ground_truth max and min after adding noise: {torch.max(ground_truth)}, {torch.min(ground_truth)} with shape {ground_truth.shape}")
+            logger.info(f"ground_truth (max, min) after adding noise: ({torch.max(ground_truth)}, {torch.min(ground_truth)}) with shape {ground_truth.shape}")
             is_noisy_ground_truth = f"noisy_{noisy_ground_truth_peak}"
             problem_name = problem_name + f"_noisy_{noisy_ground_truth_peak}"
         else:
@@ -162,7 +168,7 @@ def main(
                                     overall_scaling_factor = overall_scaling_factor
                                     ) # "cpu" or "cuda" for physics simulation
         if manual_init_evals is not None:
-            run_one_trial(problem_name=problem_name+'_SSE_dppow1_noNorm_init'+str(n_init_evals)+'_manual'+str(len(manual_init_evals))+'_'+is_noisy_ground_truth, 
+            run_one_trial(problem_name=problem_name+'_SSE_dppow1_noNorm_init_'+str(n_init_evals)+'_manual_'+str(len(manual_init_evals))+'_'+is_noisy_ground_truth+'_overall_scale_factor_'+str(overall_scaling_factor)+'_run_date_'+run_date, 
                     problem=problem, 
                     algo=algo, 
                     trial=trial, 
@@ -173,9 +179,10 @@ def main(
                     device_botorch=device,
                     manual_init_evals = manual_init_evals,
                     ground_truth_original = ground_truth_original,
+                    eps_bound = eps_bound,
                     )
         else:
-            run_one_trial(problem_name=problem_name+'_SSE_dppow1_noNorm_init'+str(n_init_evals)+'_'+is_noisy_ground_truth, 
+            run_one_trial(problem_name=problem_name+'_SSE_dppow1_noNorm_init_'+str(n_init_evals)+'_'+is_noisy_ground_truth+'_overall_scale_factor_'+str(overall_scaling_factor)+'_run_date_'+run_date, 
                     problem=problem, 
                     algo=algo, 
                     trial=trial,
@@ -185,6 +192,7 @@ def main(
                     dtype=torch.float64,
                     device_botorch=device,  
                     ground_truth_original = ground_truth_original,
+                    eps_bound = eps_bound,
                     )
 
 

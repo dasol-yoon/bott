@@ -140,8 +140,8 @@ def run_one_trial(
 
     if objective is None:
         #TODO: Always check if the bounds are correct for the configuration you are using.
-        logging.info(f'(EICF SPECIFIC) Using pixelSSE(x) = patchSSE(x)*epsilon(x) + delta(x) composite form, where epsilon(x) and delta(x) are from solving minimization problem! Epsilon(x) is clipped to [0.1, 10]')
-        objective = GenericMCObjective(lambda Y, X=None: -1*((loss_func(Y[...,:-2].to(device), reduction_true.to(device),reduce=True)*torch.clamp(Y[...,-2], 0.1, 10)+Y[...,-1])) ) #3/18/2026 added overall scaling factor to scale up the image output
+        logging.info(f'(FOR EICF) Using pixelSSE(x) = patchSSE(x)*epsilon(x) + delta(x) composite form, where epsilon(x) and delta(x) are from solving minimization problem! Epsilon(x) is clipped to [0.1, 10]')
+        objective = GenericMCObjective(lambda Y, X=None: -1*((loss_func(Y[...,:-2].to(device), reduction_true.to(device),reduce=True)*torch.clamp(Y[...,-2], 0.1, 10))+Y[...,-1])) #3/18/2026 added overall scaling factor to scale up the image output
         
         # logging.info(f'Using pixelSSE(x) = patchSSE(x)*exp(log(epsilon(x))) + delta(x) composite form, where epsilon(x) and delta(x) are from solving minimization problem! Epsilon(x) is clipped to [0.1, 10]')
         # objective = GenericMCObjective(lambda Y, X=None: -1*((loss_func(Y[...,:-2].to(device), reduction_true.to(device),reduce=True)*torch.exp(Y[...,-2])+Y[...,-1])) )#for pixel=patch*exp(log(epsilon))+delta form 02/17/2026 pb
@@ -161,22 +161,23 @@ def run_one_trial(
         )
         res = torch.load(results_dir + f"trial_{trial}.pt",weights_only=False)
         # reset the random seed
+        ground_truth_original = res['ground_truth_original']
+        max_iter = res['max_iter']
+        acqf_runtime = res['acqf_runtime']
+        gp_runtime = res['gp_runtime']
+        pixelLoss = res['pixelLoss']
+        physics_model_runtime = res['physics_model_runtime']
+        acqf_vals = res['acqf_val_list']
+        X = res['train_X']
+        train_Y = res['train_Y']
+        obj = res['obj_func_val']
         torch.set_rng_state(res["random_states"]["torch"])
         np.random.set_state(res["random_states"]["numpy"])
         random.setstate(res["random_states"]["random"])
-        # Get data
-        X = res["train_X"]
-        train_Y = res["train_Y"]
-        acqf_vals = res['acqf_val_list']
-        acqf_runtime = res['acqf_runtime']
-        gp_runtime = res['gp_runtime']
-        physics_model_runtime = res['physics_model_runtime']
-        obj = res['obj_func_val']
-        pixelLoss=res['pixelLoss']
+        if algo == 'EICF':
+            y_value = res['y_value']
         best_val = obj.max()
         n_init_evals = X.shape[0]
-        if algo == 'EICF':
-            y_value = res['y_value'] 
     else:
         logger.info(
             f"============================Start New Experiment=================================\n"
@@ -204,15 +205,15 @@ def run_one_trial(
         
         # Physical images output 
         input_params = X.tolist()
-        logger.info(f'Initial evals: {X}') #20260210
+        logger.info(f'Initial evaluations ({X.shape[0]} points): {X}') #20260210
         outputs_np = np.array([problem.get_physics_simu(*param,params_abtem_alt=params_abTEM,device_alt=problem.device) for param in input_params])
-        image_output = torch.tensor(outputs_np, dtype=dtype, device=device)*problem.overall_scaling_factor #3/18/2026 added overall scaling factor to scale up the image output        
+        image_output = torch.tensor(outputs_np, dtype=dtype, device=device)
         logging.info(f'Overall scaling factor applied (to bring up the scale of the image output): {problem.overall_scaling_factor}')
-        logging.info(f'image output max and min before normalization: {torch.max(image_output)}, {torch.min(image_output)}')
+        logging.info(f'Image output (max, min) before normalization: ({torch.max(image_output)}, {torch.min(image_output)})')
         # Normalize the image output 2/28/2026 pb
         sums = image_output.sum(dim=(1, 2), keepdim=True)
-        image_output = image_output / sums
-        logger.info(f'Normalized image output applied: max {torch.max(image_output)}, min {torch.min(image_output)}')  
+        image_output = (image_output / sums)*problem.overall_scaling_factor #3/18/2026 added overall scaling factor to scale up the image output
+        logger.info(f'Image output (max, min) after normalization: ({torch.max(image_output)}, {torch.min(image_output)})')  
 
         # calculate final objective (Loss), this is pixelSSE. Might consider rename SSE_value into pixel_losses, and make reduction_SSE into group_loss.
         pixelLoss  = loss_func(y_simu=image_output, y_true=measurement_true, reduce=False).unsqueeze(-1) # pixelLoss = [n_init, 1]
@@ -221,23 +222,21 @@ def run_one_trial(
         if algo=='EICF':
             #TODO: Always check if the bounds are correct for the configuration you are using. (min, max of epsilon)
             y_reduction = (problem.reduction_func(image_output).to(device))*problem.scaling_factor.to(device) #01/30/2026 added scaling factor
-            logging.info(f'initial y_reduction (patch values) for {y_reduction.shape[0]} inputs: {y_reduction}')
+            logging.info(f'(For EICF) Initial y_reduction (patch values) for {y_reduction.shape[0]} inputs: {y_reduction}')
             reductionLoss = loss_func(y_simu=y_reduction,
                             y_true=reduction_true,
                             reduce=False).unsqueeze(-1) # [n_init, 1] #01/30/2026 removed scaling factor
-            logging.info(f'reductionLoss (patch SSE) for {reductionLoss.shape[0]} inputs: {reductionLoss}')
+            logging.info(f'(For EICF) reductionLoss (patch SSE) for {reductionLoss.shape[0]} inputs: {reductionLoss}')
 
             # logging.info(f'Using test linear form for the EICF 2/12/2026')
             # y_value = torch.cat((y_reduction,epsilon,delta),dim=-1) # [n_init, num_tiles+2]#2/11/2026 for new composite to control epsilon behavior
             # y_value = torch.cat((y_reduction,delta),dim=-1) # test linear form 02/12/2026 pb
             #logging.info(f'Initial intermediate outputs (patch, delta) for EICF: {y_value}') # test linear form 02/12/2026 pb
-
-            logging.info(f'(Before acqf opt) Using pixelSSE(x) = patchSSE(x)*epsilon(x) + delta(x) composite form, where epsilon(x) and delta(x) are from solving minimization problem! Epsilon(x) is clipped to [0.1, 10]')
-            epsilon, delta = solve(pixelLoss=pixelLoss, reductionLoss=reductionLoss,eps_bound=eps_bound) #2/11/2026 for new composite to control epsilon behavior
+            epsilon, delta = solve(pixelSSE_val=pixelLoss, patchSSE_val=reductionLoss,eps_bound=eps_bound) #2/11/2026 for new composite to control epsilon behavior
             y_value = torch.cat((y_reduction,epsilon,delta),dim=-1) # 02/25/2026 use epsilon for epsilon
             # y_value = torch.cat((y_reduction,torch.log(epsilon),delta),dim=-1) # 02/17/2026 use log for epsilon
             # logging.info(f'Initial intermediate outputs (patch, log(epsilon), delta) for EICF: {y_value}') 
-            logging.info(f'Initial intermediate outputs (patch, epsilon, delta) for EICF: {y_value}') 
+            logging.info(f'(For EICF) Initial intermediate outputs (patch, epsilon, delta): {y_value}') 
             
         obj = -1*pixelLoss # maximization direction
         best_val = obj.max() # tensor
@@ -284,14 +283,14 @@ def run_one_trial(
         # Run physical model with a new_x
         input_param = new_x.tolist()[0] # [value0, value1, value2]
         time_simu_start = time_sync()
-        image_temp = torch.from_numpy(problem.get_physics_simu(*input_param,params_abtem_alt=params_abTEM,device_alt=problem.device)).to(dtype=dtype, device=device)*problem.overall_scaling_factor #3/18/2026 added overall scaling factor to scale up the image output
+        image_temp = torch.from_numpy(problem.get_physics_simu(*input_param,params_abtem_alt=params_abTEM,device_alt=problem.device)).to(dtype=dtype, device=device)
         time_simu_end = time_sync()
-        logging.info(f'overall scaling factor applied (to bring up the scale of the image output): {problem.overall_scaling_factor}')
-        logging.info(f'(In BO loop) image output max and min BEFORE normalization: {torch.max(image_temp)}, {torch.min(image_temp)}')
+        logging.info(f'Overall scaling factor applied (to bring up the scale of the image output): {problem.overall_scaling_factor}')
+        logging.info(f'(In BO loop) Image output (max, min) BEFORE normalization: ({torch.max(image_temp)}, {torch.min(image_temp)})')
         physics_model_runtime.append(time_simu_end-time_simu_start)
         # Normalize the image output 2/28/2026 pb
-        image_temp = image_temp / image_temp.sum()
-        logger.info(f'(In BO loop) image output max and min AFTER normalization: max {torch.max(image_temp)}, min {torch.min(image_temp)}')  
+        image_temp = (image_temp / image_temp.sum())*problem.overall_scaling_factor #3/18/2026 added overall scaling factor to scale up the image output
+        logger.info(f'(In BO loop) Image output (max, min) AFTER normalization: ({torch.max(image_temp)}, {torch.min(image_temp)})')  
         # image_output = torch.cat((image_output, image_temp.unsqueeze(0)),dim=0) # This will continue to concat new images but image_output is never used. We should remove this unless it's needed somewhere else.
         # image_t = Image.fromarray(image_temp.cpu().numpy()) #20250520 #01/30/2026 removed -- not saving images anymore
         # image_t.save(image_dir+make_output_filenm(input_param)) #20250520 #01/30/2026 removed -- not saving images anymore
@@ -309,7 +308,7 @@ def run_one_trial(
                                     y_true=reduction_true,
                                     reduce=False).unsqueeze(0) # [1,] 02/17/2026
             logging.info(f'reductionLoss (patch SSE) for new input: {reductionLoss}')
-            epsilon, delta = solve(new_Loss=new_Loss, reductionLoss=reductionLoss,eps_bound=eps_bound) #2/11/2026 for new composite to control epsilon behavior
+            epsilon, delta = solve(pixelSSE_val=new_Loss, patchSSE_val=reductionLoss,eps_bound=eps_bound) #2/11/2026 for new composite to control epsilon behavior
             y_temp = torch.cat((y_reduction.unsqueeze(0),epsilon,delta),dim=-1) #02/25/2026 use epsilon for epsilon
             logging.info(f'y_temp for new input (patch, epsilon, delta) {y_temp}')
 
@@ -334,17 +333,17 @@ def run_one_trial(
         
         logger.info(f"\nIteration: {iter+1}/{max_iter}")
         logger.info(f"GP model fitting time: {time_model_end - time_model_start:.3f} sec")
-        logger.info(f"Acqu func sampling time: {time_sample_end - time_sample_start:.3f} sec")
+        logger.info(f"Acqf function sampling time: {time_sample_end - time_sample_start:.3f} sec")
         logger.info(f"Physics simulation time: {time_simu_end - time_simu_start:.3f} sec")
         logger.info(f"Iteration time: {time_iter_end - time_iter_start:.3f} sec")
         logger.info(f"Suggested point: {new_x.cpu().numpy()}")
-        logger.info(f"new pixel Loss value (no minus): {new_Loss.cpu().numpy()}")
+        logger.info(f"New objective function value (-pixelSSE): {-1*new_Loss.cpu().numpy()}")
         if algo not in ['EI','KG','Random','TS']:
             # logger.info(f"Evaluated multi-output value (patch, epsilon, delta): {y_temp}")
             logger.info(f"Evaluated multi-output value (patch, delta): {y_temp}") # test linear form 02/12/2026 pb
         # logger.info(f"Best iteration index found: {best_idx+1}")  
         logger.info(f"Best point found: {best_params}")
-        logger.info(f"Best objective function value (pixelSSE) found: {best_val}")
+        logger.info(f"Best objective function value (-pixelSSE) found: {best_val}")
         logger.info(f"==========================================================")
         if algo == 'EICF':
             train_Y = y_value
