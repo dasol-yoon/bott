@@ -263,8 +263,8 @@ def run_one_trial(
         # Get model #TODO Do we really need to create model with every iteration?
         time_model_start = time_sync()
         #3/18/2026 used fixed noise level for the model
-        logging.info(f'Using fixed noise level for the model: 1e-10')
-        model = SingleTaskGP(train_X=X, train_Y=train_Y, train_Yvar=torch.ones_like(train_Y) * 1e-10, #TODO Need to configure this variance scaling hyperparameter
+        logging.info(f'Using fixed noise level for the model: 1e-6')
+        model = SingleTaskGP(train_X=X, train_Y=train_Y, train_Yvar=torch.ones_like(train_Y) * 1e-6, #TODO Need to configure this variance scaling hyperparameter
                         outcome_transform=Standardize(m=train_Y.shape[-1]),input_transform=Normalize(d=X.shape[-1])).to(device)
         fit_gpytorch_mll(ExactMarginalLogLikelihood(model.likelihood, model))
         time_model_end = time_sync()
