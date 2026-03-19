@@ -240,6 +240,8 @@ def run_one_trial(
             
         obj = -1*pixelLoss # maximization direction
         best_val = obj.max() # tensor
+        best_idx = torch.argmax(obj.squeeze(-1))
+        best_params = X[best_idx].cpu().numpy()
         acqf_vals = []
         acqf_runtime = []
         gp_runtime = []
@@ -247,6 +249,8 @@ def run_one_trial(
         n_points_init = X.shape[0]
         time_init_end = time_sync()
         logger.info(f"Initializing model with '{n_points_init}' initial evaluations took {time_init_end - time_init_start:.3f} sec")
+        logger.info(f'Best initial objective value: {best_val}')
+        logger.info(f'Best initial parameters: {best_params}')
         logger.info("==========================================================")
     
     # Start the optimization loop
