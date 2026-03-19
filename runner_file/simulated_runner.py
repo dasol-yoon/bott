@@ -42,7 +42,7 @@ def main(
         noisy_ground_truth_peak: float | None = None,
         manual_init_evals: list[list[float]] | None = None,
 ) -> None: 
-        """Run one replication for the dropwave function network test problem
+        """Run one replication for simulated experiment
 
         Args:
             trial: Seed of the trial.
