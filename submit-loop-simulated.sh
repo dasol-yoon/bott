@@ -1,8 +1,8 @@
 #!/bin/sh
 
-for trial in $(seq 1 1 20)
+for trial in $(seq 19 1 19)
 do
-    for algo in EICF KG EI Random
+    for algo in KG
     do
         for num_iter in 50
         do
@@ -10,7 +10,7 @@ do
             do
                 for n_init_evals in 7
                 do
-                    for noisy_ground_truth_peak in 0
+                    for noisy_ground_truth_peak in 20
                     do
                     sbatch -J run0_${trial}_${algo}_${noisy_ground_truth_peak} \
                         -o ./logs/Tri_${trial}_Alg_${algo}_noisy_${noisy_ground_truth_peak}_%j.out \
