@@ -1,6 +1,6 @@
 #!/bin/sh
 
-for trial in $(seq 11 1 11)
+for trial in $(seq 16 1 16)
 do
     for algo in EICF
     do
