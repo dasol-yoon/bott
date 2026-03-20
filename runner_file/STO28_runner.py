@@ -122,13 +122,14 @@ def main(
                                         imgshape[1]/originshape[1]), order=3)
             ground_truth = torch.Tensor(ground_truth)
             ground_truth = (ground_truth / ground_truth.sum())*overall_scaling_factor #3/18/2026 added overall scaling factor to scale up the image output
-            problem_name = f"EXP_STO28_newcomposite_eps_bound_{eps_bound}"
+            problem_name = f"MAX_EXP_STO28_newcomposite_eps_bound_{eps_bound}"
 
         elif isinstance(param_truth, list):
             ground_truth = torch.Tensor(simulate_cbed(param_truth[0],param_truth[1],
                                                   param_truth[2], params_abTEM,
                                                   device_simu='gpu')) # abtem takes "cpu" or "gpu"
-            ground_truth = (ground_truth / ground_truth.sum())*overall_scaling_factor #3/18/2026 added overall scaling factor to scale up the image output
+            # ground_truth = (ground_truth / ground_truth.sum())*overall_scaling_factor #3/18/2026 added overall scaling factor to scale up the image output
+            ground_truth = (ground_truth / ground_truth.max())*overall_scaling_factor #3/20/2026 changed to max to scale image to (0,1) then scale up to overall_scaling_factor
             problem_name = f"GT_{param_truth[0]}_{param_truth[1]}_{param_truth[2]}_newcomposite_eps_bound_{eps_bound}"
         else:
               raise ValueError("param_truth should be a list of 3 floats or a string path to the image.")

@@ -211,8 +211,15 @@ def run_one_trial(
         logging.info(f'Overall scaling factor applied (to bring up the scale of the image output): {problem.overall_scaling_factor}')
         logging.info(f'Image output (max, min) before normalization: ({torch.max(image_output)}, {torch.min(image_output)})')
         # Normalize the image output 2/28/2026 pb
-        sums = image_output.sum(dim=(1, 2), keepdim=True)
-        image_output = (image_output / sums)*problem.overall_scaling_factor #3/18/2026 added overall scaling factor to scale up the image output
+        # sums = image_output.sum(dim=(1, 2), keepdim=True)
+        # image_output = (image_output / sums)*problem.overall_scaling_factor #3/18/2026 added overall scaling factor to scale up the image output
+        logging.info(f'Using max to scale image to (0,1) then scale up to overall_scaling_factor')
+        # Step 1: get max over (b, c)
+        max_vals = image_output.amax(dim=(1, 2))   # shape: (a,)
+        # Step 2: reshape for broadcasting
+        max_vals = max_vals.view(image_output.shape[0], 1, 1)  # shape: (a,1,1)
+        # Step 3: divide
+        image_output = image_output / max_vals
         logger.info(f'Image output (max, min) after normalization: ({torch.max(image_output)}, {torch.min(image_output)})')  
 
         # calculate final objective (Loss), this is pixelSSE. Might consider rename SSE_value into pixel_losses, and make reduction_SSE into group_loss.
@@ -293,7 +300,9 @@ def run_one_trial(
         logging.info(f'(In BO loop) Image output (max, min) BEFORE normalization: ({torch.max(image_temp)}, {torch.min(image_temp)})')
         physics_model_runtime.append(time_simu_end-time_simu_start)
         # Normalize the image output 2/28/2026 pb
-        image_temp = (image_temp / image_temp.sum())*problem.overall_scaling_factor #3/18/2026 added overall scaling factor to scale up the image output
+        # image_temp = (image_temp / image_temp.sum())*problem.overall_scaling_factor #3/18/2026 added overall scaling factor to scale up the image output
+        logging.info(f'Using max to scale image to (0,1) then scale up to overall_scaling_factor')
+        image_temp = (image_temp / image_temp.max())*problem.overall_scaling_factor #3/20/2026 changed to max to scale image to (0,1) then scale up to overall_scaling_factor
         logger.info(f'(In BO loop) Image output (max, min) AFTER normalization: ({torch.max(image_temp)}, {torch.min(image_temp)})')  
         # image_output = torch.cat((image_output, image_temp.unsqueeze(0)),dim=0) # This will continue to concat new images but image_output is never used. We should remove this unless it's needed somewhere else.
         # image_t = Image.fromarray(image_temp.cpu().numpy()) #20250520 #01/30/2026 removed -- not saving images anymore
