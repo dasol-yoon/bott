@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
-import argparse
-import logging
+import argparse,json, logging,random
 import os
-import random
 from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
@@ -462,6 +460,7 @@ def parse():
     parser.add_argument("--num_iter", "-n", type=int, default=50)
     parser.add_argument("--n_init_evals", "-ni", type=int, default=7)
     parser.add_argument("--noisy_ground_truth_peak", "-np", type=float, default=None)
+    parser.add_argument("--manual_init_evals", "-mie", type=str, default=None)
     grp = parser.add_mutually_exclusive_group(required=True)
     grp.add_argument('--param_truth', "-p", type=float, nargs=3, help='Three param truth values')
     grp.add_argument('--param_truth_path', "-f", type=str, help='path to the ground truth image')
@@ -478,5 +477,8 @@ def parse():
 
     # Remove the secondary variable so main() only sees 'param_truth'
     delattr(args, 'param_truth_path')
-
+    
+    args.manual_init_evals = (json.loads(args.manual_init_evals) 
+                              if args.manual_init_evals is not None else None
+                              )
     return args
