@@ -303,8 +303,9 @@ def run_one_trial(
         image_temp = (image_temp / image_temp.max())#3/20/2026 changed to max to scale image to (0,1) then scale up to overall_scaling_factor
         logger.info(f'(In BO loop) Image output (max, min) AFTER normalization: ({torch.max(image_temp)}, {torch.min(image_temp)})')  
         # image_output = torch.cat((image_output, image_temp.unsqueeze(0)),dim=0) # This will continue to concat new images but image_output is never used. We should remove this unless it's needed somewhere else.
-        # image_t = Image.fromarray(image_temp.cpu().numpy()) #20250520 #01/30/2026 removed -- not saving images anymore
-        # image_t.save(image_dir+make_output_filenm(input_param)) #20250520 #01/30/2026 removed -- not saving images anymore
+        if problem.save_results: #save images
+            image_t = Image.fromarray(image_temp.cpu().numpy()) 
+            image_t.save(image_dir+make_output_filenm(input_param))
 
         # calculate final objective (Loss)
         new_Loss = loss_func(y_simu=image_temp.unsqueeze(0),y_true=measurement_true,reduce=False).unsqueeze(-1) # [1,1]
