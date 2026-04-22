@@ -32,7 +32,7 @@ class OptimizationProblem(SyntheticTestFunction):
                  noise_std = None,
                  dtype = torch.float64, 
                  device='cuda',
-                 params_abtem=None) -> None: # noise_std somehow has no effect when it's < 1, very weird
+                 params_abtem=None,scan_coords=None) -> None: # noise_std somehow has no effect when it's < 1, very weird
         self.dtype = dtype
         self.device = device
         self.norm_arr = norm_arr
@@ -55,6 +55,9 @@ class OptimizationProblem(SyntheticTestFunction):
         self.scaling_factor = self.get_scaling_factor(reduction_params)
         self.physics_model = simulate_cbed
         self.num_tiles = reduction_params['reduction_kwargs']['num_tiles']
+
+        #0207temp
+        self.scan_coords = scan_coords
 
     def get_measurement_true(self):
         # Write it as a method so we can preprocess them in the future, like normalization, resampling and such
@@ -93,7 +96,8 @@ class OptimizationProblem(SyntheticTestFunction):
         param_simu_abtem = self.params_abtem if params_abtem_alt is None else params_abtem_alt
         
         simulation = self.physics_model(*params, device_simu=device_simu, 
-                                        params_abtem=param_simu_abtem)
+                                        params_abtem=param_simu_abtem,
+                                        scan_coords = self.scan_coords)
         if self.norm_arr:
             return normalize(simulation) #[0,1]
         else:

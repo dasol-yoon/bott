@@ -81,7 +81,9 @@ def simulate_potential(thickness, params_abtem=None, device_simu='cpu'):
     
     return potential_arr
     
-def simulate_cbed(thickness, tilt_x, tilt_y, params_abtem=None, device_simu='cpu', pbar=False):
+def simulate_cbed(thickness, tilt_x, tilt_y, params_abtem=None, 
+                  device_simu='cpu', pbar=False, scan_coords=None): 
+    #scan coords:0207temp
     
     if params_abtem is None:
         params_abtem = get_default_abtem_params()
@@ -144,22 +146,26 @@ def simulate_cbed(thickness, tilt_x, tilt_y, params_abtem=None, device_simu='cpu
     cell_constants = np.diag(unit_cell.cell)
     super_cell_reps = np.ceil(target_object_extent / cell_constants).astype('int')
     super_cell = unit_cell * super_cell_reps
-    # print(f"super_cell = {super_cell}")
+    print(f"super_cell = {super_cell}")
+    if params_abtem['vac_x']: #20250717 temp
+        vac_x = params_abtem['vac_x']
+        super_cell.center(axis=(0),vacuum=vac_x)
     
     # Calculate the potential
     if use_frozen_phonon:
-        # print(f"Using FrozenPhonons potential with {num_phonon_configs} configs")
+        print(f"Using FrozenPhonons potential with {num_phonon_configs} configs")
         atoms = abtem.FrozenPhonons(atoms=super_cell, num_configs=num_phonon_configs, sigmas=phonon_sigma, seed=random_seed)
         potential = abtem.Potential(atoms=atoms, sampling=lateral_sampling, parametrization=potential_parametrization,
             slice_thickness=vertical_sampling, projection=potential_projection)
     else:
-        # print("Using Static potential")
+        print("Using Static potential")
         potential = abtem.Potential(atoms=super_cell, sampling=lateral_sampling, parametrization=potential_parametrization,
             slice_thickness=vertical_sampling, projection=potential_projection)
     # print(f"potential.shape = {potential.shape}")
     
     # Calculate the probe
-    probe = abtem.Probe(energy=energy, semiangle_cutoff=convergence_angle, defocus=df, tilt=(tilt_x, tilt_y), **aberrations)
+    #20250604 temp: int added
+    probe = abtem.Probe(energy=energy, semiangle_cutoff=convergence_angle, defocus=df, tilt=(int(tilt_x), int(tilt_y)), **aberrations)
     probe.grid.match(potential)
     # # Useful information
     # from bott.utils import get_EM_constants
@@ -173,9 +179,15 @@ def simulate_cbed(thickness, tilt_x, tilt_y, params_abtem=None, device_simu='cpu
     
     
     # Make scan for 1 unit cell along x, y
-    potential_extent = np.array(potential.extent)
-    scan_start = np.array(potential_extent)/2
-    scan_end = scan_start + cell_constants[:2]
+    if scan_coords:
+        scan_start = scan_coords[0]
+        scan_end = scan_coords[1]
+        print(scan_start)
+        print(scan_end)
+    else:
+        potential_extent = np.array(potential.extent)
+        scan_start = np.array(potential_extent)/2
+        scan_end = scan_start + cell_constants[:2]
     grid_scan = abtem.scan.GridScan(start=scan_start, end=scan_end,sampling=scan_step_size)
     # print(f"grid_scan.axes_metadata = {grid_scan.axes_metadata}")
     
