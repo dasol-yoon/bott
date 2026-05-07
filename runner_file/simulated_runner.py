@@ -1,5 +1,6 @@
 #edited 20250513 cluster
 import sys
+from datetime import datetime
 from pathlib import Path
 import random
 import numpy as np
@@ -26,8 +27,6 @@ logging.basicConfig(level=logging.INFO,  # Adjust log level as needed (DEBUG, IN
                     format='%(asctime)s - %(levelname)s - %(message)s')
 
 logger = logging.getLogger(__name__)  # Get a logger for the current module
-# logger.setLevel(logging.INFO)
-# logger.handlers.pop()
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -48,19 +47,17 @@ def main(
             trial: Seed of the trial.
             algo: Algorithm to use. Supported algorithms: "EI", "KG", "EICF", "Random".
             num_iter: number of maximum BO iterations
-            param1: Thickness
-            param2: Tilt-x
-            param3: Tilt-y
+            n_init_evals: number of initial evaluations
+            param_truth: ground truth parameters [thickness, tilt-x, tilt-y]
             noisy_ground_truth_peak: max photon count (controls noise level)
             manual_init_evals: list of lists of initial evaluation points
-            
         Returns:
             None.
         """
         #TODO here are parameters to change for different experiments
         overall_scaling_factor = 1000
         eps_bound = 10
-        run_date = "March19"
+        run_date = datetime.today().strftime("%Y-%m-%d") #22/04/2026 for new composite form
         seed = 42
         random.seed(seed)
         np.random.seed(seed)
@@ -68,12 +65,22 @@ def main(
 
         if torch.cuda.is_available():
             torch.cuda.manual_seed_all(seed)
+        logger.info(f'--------------------------------------------------------------------------------')
+        logger.info(f'Running simulated experiments with configurations below:')
+        logger.info(f'Ground truth: {param_truth}')
+        logger.info(f'Noisy ground truth peak: {noisy_ground_truth_peak}')
+        logger.info(f'Run date: {run_date}')
+        logger.info(f'Seed: {seed}')
+        logger.info(f'Overall scaling factor: {overall_scaling_factor}')
+        logger.info(f'Epsilon bound: {eps_bound}')
+        logger.info(f'Algorithm: {algo}')
+        logger.info(f'Number of iterations: {num_iter}')
+        logger.info(f'Number of initial evaluations: {n_init_evals}')
+        logger.info(f'Noisy ground truth peak: {noisy_ground_truth_peak}')
+        logger.info(f'--------------------------------------------------------------------------------')
 
-        logger.info(f'domain knowledge 5 segment tile experiment. Branch Multiplied scale factor test')
 
-        params_abTEM = {#todo: find a better way to enter parameters
-                # # Device configuration
-                # "device_abtem": 'gpu',#"cpu",
+        params_abTEM = {
 
                 # Crystal structure input
                 "path_crystal": "/home/pb482/bott/data/SrTiO3.cif",
@@ -121,28 +128,30 @@ def main(
                                         (imgshape[0]/originshape[0], 
                                         imgshape[1]/originshape[1]), order=3)
             ground_truth = torch.Tensor(ground_truth)
-            ground_truth = (ground_truth / ground_truth.sum())*overall_scaling_factor #3/18/2026 added overall scaling factor to scale up the image output
+            # ground_truth = (ground_truth / ground_truth.sum())*overall_scaling_factor #3/18/2026 added overall scaling factor to scale up the image output
+            logger.info(f"Scaling ground truth by overall scaling factor: {overall_scaling_factor}")
+            ground_truth = ground_truth*overall_scaling_factor
             problem_name = f"domain_5seg_mult_factor_obj_adj_newcomposite_eps_bound_{eps_bound}"
 
         elif isinstance(param_truth, list):
             ground_truth = torch.Tensor(simulate_cbed(param_truth[0],param_truth[1],
                                                   param_truth[2], params_abTEM,
                                                   device_simu='gpu')) # abtem takes "cpu" or "gpu"
-            ground_truth = (ground_truth / ground_truth.sum())*overall_scaling_factor #3/18/2026 added overall scaling factor to scale up the image output
+            # ground_truth = (ground_truth / ground_truth.sum())*overall_scaling_factor #3/18/2026 added overall scaling factor to scale up the image output
+            logger.info(f"Scaling ground truth by overall scaling factor: {overall_scaling_factor}")
+            ground_truth = ground_truth*overall_scaling_factor
             problem_name = f"GT_{param_truth[0]}_{param_truth[1]}_{param_truth[2]}_newcomposite_eps_bound_{eps_bound}"
         else:
               raise ValueError("param_truth should be a list of 3 floats or a string path to the image.")
         if noisy_ground_truth_peak is not None and noisy_ground_truth_peak > 0:
             ground_truth_original = ground_truth.clone()
-            logger.info(f"Considering noisy ground truth with peak {noisy_ground_truth_peak}")
-            logger.info(f"ground_truth (max, min) before adding noise: ({torch.max(ground_truth)}, {torch.min(ground_truth)}) with shape {ground_truth.shape}")
+            logger.info(f"Before adding noise, ground_truth (max, min) : ({torch.max(ground_truth)}, {torch.min(ground_truth)}) with shape {ground_truth.shape}")
             ground_truth = add_poisson_noise(image=ground_truth, peak=noisy_ground_truth_peak)
-            logger.info(f"ground_truth (max, min) after adding noise: ({torch.max(ground_truth)}, {torch.min(ground_truth)}) with shape {ground_truth.shape}")
+            logger.info(f"After adding noise, ground_truth (max, min) : ({torch.max(ground_truth)}, {torch.min(ground_truth)}) with shape {ground_truth.shape}")
             is_noisy_ground_truth = f"noisy_{noisy_ground_truth_peak}"
             problem_name = problem_name + f"_noisy_{noisy_ground_truth_peak}"
         else:
             ground_truth_original = ground_truth.clone()
-            logger.info("No noisy ground truth considered")
             is_noisy_ground_truth = "nonoise"
             problem_name = problem_name + f"_nonoise"
         sf_quad = 4303
