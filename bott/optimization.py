@@ -207,18 +207,12 @@ def run_one_trial(
         outputs_np = np.array([problem.get_physics_simu(*param,params_abtem_alt=params_abTEM,device_alt=problem.device) for param in input_params])
         image_output = torch.tensor(outputs_np, dtype=dtype, device=device)
         logging.info(f'Overall scaling factor applied (to bring up the scale of the image output): {problem.overall_scaling_factor}')
-        logging.info(f'Image output (max, min) before normalization: ({torch.max(image_output)}, {torch.min(image_output)})')
+        logging.info(f'Image output (max, min) before scaling: ({torch.max(image_output)}, {torch.min(image_output)})')
         # Normalize the image output 2/28/2026 pb
         # sums = image_output.sum(dim=(1, 2), keepdim=True)
         # image_output = (image_output / sums)*problem.overall_scaling_factor #3/18/2026 added overall scaling factor to scale up the image output
-        logging.info(f'Using max to scale image to (0,1) then scale up to overall_scaling_factor')
-        # Step 1: get max over (b, c)
-        max_vals = image_output.amax(dim=(1, 2))   # shape: (a,)
-        # Step 2: reshape for broadcasting
-        max_vals = max_vals.view(image_output.shape[0], 1, 1)  # shape: (a,1,1)
-        # Step 3: divide
-        image_output = (image_output / max_vals)
-        logger.info(f'Image output (max, min) after normalization: ({torch.max(image_output)}, {torch.min(image_output)})')  
+        image_output = image_output*problem.overall_scaling_factor
+        logger.info(f'Image output (max, min) after scaling: ({torch.max(image_output)}, {torch.min(image_output)})')  
 
         # calculate final objective (Loss), this is pixelSSE. Might consider rename SSE_value into pixel_losses, and make reduction_SSE into group_loss.
         pixelLoss  = loss_func(y_simu=image_output, y_true=measurement_true, reduce=False).unsqueeze(-1) # pixelLoss = [n_init, 1]
@@ -236,11 +230,8 @@ def run_one_trial(
             # logging.info(f'Using test linear form for the EICF 2/12/2026')
             # y_value = torch.cat((y_reduction,epsilon,delta),dim=-1) # [n_init, num_tiles+2]#2/11/2026 for new composite to control epsilon behavior
             # y_value = torch.cat((y_reduction,delta),dim=-1) # test linear form 02/12/2026 pb
-            #logging.info(f'Initial intermediate outputs (patch, delta) for EICF: {y_value}') # test linear form 02/12/2026 pb
             epsilon, delta = solve(pixelSSE_val=pixelLoss, patchSSE_val=reductionLoss,eps_bound=eps_bound) #2/11/2026 for new composite to control epsilon behavior
             y_value = torch.cat((y_reduction,epsilon,delta),dim=-1) # 02/25/2026 use epsilon for epsilon
-            # y_value = torch.cat((y_reduction,torch.log(epsilon),delta),dim=-1) # 02/17/2026 use log for epsilon
-            # logging.info(f'Initial intermediate outputs (patch, log(epsilon), delta) for EICF: {y_value}') 
             logging.info(f'(For EICF) Initial intermediate outputs (patch, epsilon, delta): {y_value}') 
             
         obj = -1*pixelLoss # maximization direction
@@ -295,14 +286,12 @@ def run_one_trial(
         image_temp = torch.from_numpy(problem.get_physics_simu(*input_param,params_abtem_alt=params_abTEM,device_alt=problem.device)).to(dtype=dtype, device=device)
         time_simu_end = time_sync()
         logging.info(f'Overall scaling factor applied (to bring up the scale of the image output): {problem.overall_scaling_factor}')
-        logging.info(f'(In BO loop) Image output (max, min) BEFORE normalization: ({torch.max(image_temp)}, {torch.min(image_temp)})')
+        logging.info(f'(In BO loop) Image output (max, min) BEFORE scaling: ({torch.max(image_temp)}, {torch.min(image_temp)})')
         physics_model_runtime.append(time_simu_end-time_simu_start)
         # Normalize the image output 2/28/2026 pb
         # image_temp = (image_temp / image_temp.sum())*problem.overall_scaling_factor #3/18/2026 added overall scaling factor to scale up the image output
-        logging.info(f'Using max to scale image to (0,1) then scale up to overall_scaling_factor')
-        image_temp = (image_temp / image_temp.max())#3/20/2026 changed to max to scale image to (0,1) then scale up to overall_scaling_factor
-        logger.info(f'(In BO loop) Image output (max, min) AFTER normalization: ({torch.max(image_temp)}, {torch.min(image_temp)})')  
-        # image_output = torch.cat((image_output, image_temp.unsqueeze(0)),dim=0) # This will continue to concat new images but image_output is never used. We should remove this unless it's needed somewhere else.
+        image_temp = image_temp*problem.overall_scaling_factor
+        logger.info(f'(In BO loop) Image output (max, min) AFTER scaling: ({torch.max(image_temp)}, {torch.min(image_temp)})')  
         if problem.save_results: #save images
             image_t = Image.fromarray(image_temp.cpu().numpy()) 
             image_t.save(image_dir+make_output_filenm(input_param))
