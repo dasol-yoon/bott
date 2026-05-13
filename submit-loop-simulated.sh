@@ -6,7 +6,7 @@ do
     do
         for num_iter in 50
         do
-            for param_truth in "100 1.5 -1.5" 
+            for param_truth in "380 1.5 -1.5" 
             do
                 for n_init_evals in 7
                 do

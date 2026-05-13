@@ -416,7 +416,7 @@ def get_new_sample(model,algo, problem,best_val,objective, device='cpu', dtype=t
             acq_function=EICF,
             bounds=problem.bounds.to(dtype=dtype, device=device),
             q=1,
-            num_restarts=20,
+            num_restarts=50,
             raw_samples=100,
         )
         return new_x, acqf_val
