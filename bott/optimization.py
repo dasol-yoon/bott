@@ -406,17 +406,17 @@ def get_new_sample(model,algo, problem,best_val,objective, device='cpu', dtype=t
         new_x, acqf_val = optimize_acqf(acq_function=acqf,bounds=problem.bounds.to(dtype=dtype, device=device),q=1,num_restarts=20,raw_samples=100)        
         return new_x, acqf_val
     elif algo == 'KG':  
-        acqf = qKnowledgeGradient(model, num_fantasies=128)
-        new_x, acqf_val = optimize_acqf(acq_function=acqf,bounds=problem.bounds.to(dtype=dtype, device=device),q=1,num_restarts=10,raw_samples=512)
+        acqf = qKnowledgeGradient(model, num_fantasies=16)
+        new_x, acqf_val = optimize_acqf(acq_function=acqf,bounds=problem.bounds.to(dtype=dtype, device=device),q=1,num_restarts=20,raw_samples=100)
         return new_x, acqf_val 
     elif algo == 'EICF':
-        sampler = SobolQMCNormalSampler(torch.Size([1024])).to(dtype=dtype, device=device)
+        sampler = SobolQMCNormalSampler(torch.Size([512])).to(dtype=dtype, device=device)
         EICF = qLogExpectedImprovement(model=model, best_f=best_val, objective=objective,sampler=sampler).to(dtype=dtype, device=device)
         new_x, acqf_val = optimize_acqf(
             acq_function=EICF,
             bounds=problem.bounds.to(dtype=dtype, device=device),
             q=1,
-            num_restarts=50,
+            num_restarts=20,
             raw_samples=100,
         )
         return new_x, acqf_val
