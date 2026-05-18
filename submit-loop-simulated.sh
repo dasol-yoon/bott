@@ -2,7 +2,7 @@
 
 for trial in $(seq 1 1 20)
 do
-    for algo in EI Random EICF KG
+    for algo in EICF EI KG Random
     do
         for num_iter in 50
         do
@@ -10,7 +10,7 @@ do
             do
                 for n_init_evals in 7
                 do
-                    for noisy_ground_truth_peak in 0
+                    for noisy_ground_truth_peak in 150
                     do
                     sbatch -J simulated_trial_${trial}_algo_${algo}_noisy_${noisy_ground_truth_peak} \
                         -o ./logs/simulated_trial_${trial}_algo_${algo}_noisy_${noisy_ground_truth_peak}_%j.out \
