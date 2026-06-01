@@ -1,0 +1,33 @@
+#!/bin/bash
+#SBATCH --job-name=exp2b          # Job name
+#SBATCH --mail-type=END,FAIL                      # Request status by email 
+#SBATCH --mail-user=dy327@cornell.edu        # Email address to send results to.
+#SBATCH --nodes=1                                 
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=4
+#SBATCH --time=90:00:00                           # Time limit (hh:mm:ss)
+#SBATCH --gres=gpu:2g.20gb:1                          # Request any available GPU
+# #SBATCH --nodelist=c0003
+
+# Parse arguments
+num_iter=50
+n_init_evals=7
+param1='/home/fs01/dy327/bott-data/data/LeBeau-STO_38nm.png'
+manual_init_evals='[[100,3,-3],[200,3,-3],[300,3,-3]]'
+
+# Add to the PYTHONPATH; temporary; append to existing path
+export PYTHONPATH=$PYTHONPATH:/home/fs01/dy327/venv/nbott/bott
+source $HOME/miniconda/etc/profile.d/conda.sh
+conda activate bott6
+
+echo "param_truth: ($param1)"
+
+
+for algo in EI; do
+    for trial in $(seq 1 1 10); do
+        echo "Running trial=$trial with algo=$algo, num_iter $num_iter"
+        python ./domain.py --trial "$trial" --algo "$algo" \
+        --num_iter $num_iter --param_truth_path $param1 \
+        --n_init_evals $n_init_evals --manual_init_evals $manual_init_evals
+    done
+done
