@@ -23,6 +23,8 @@ class ReductionFunction(torch.nn.Module):
             arr = get_square_tiles(measurement, **reduction_kwargs)
         elif reduction_type == 'domain':
             arr = get_domain_tiles(measurement, **reduction_kwargs)
+        elif reduction_type == 'domain8quad':
+            arr = get_domain_tiles_8quad(measurement, **reduction_kwargs)
         else:
             raise ValueError(f"The current implementation does not support reduction type '{reduction_type}'")
         
@@ -307,3 +309,92 @@ def get_domain_tiles(
         return tiles
     else:
         raise ValueError(f"The current implementation does not support reduce = '{reduce}', please use either 'mean', 'sum', or 'False'") 
+    
+def get_domain_tiles_8quad(
+    measurement: torch.Tensor,
+    radius: float = 0.3,  # Radius as a fraction of min(height, width)
+    reduce = 'mean',
+) -> torch.Tensor:
+    """
+    Divide the measurement tensor into eight tiles: 4 quadrants from the circular center region 
+    and 4 peripheral tiles surrounding it.
+    Returns the mean values of these regions as a tensor.
+
+    Args:
+        measurement: Input tensor of [batch, H, W] or [H, W].
+        radius: Radius of the circular mask as a fraction of the minimum dimension.
+        reduce: Reduction method - 'mean', 'sum', or False/None for no reduction.
+
+    Returns:
+        A tensor with eight elements: means of center quadrants (TL, TR, BL, BR) 
+        and peripheral quadrants (TL, TR, BL, BR).
+    """
+    
+    # Get the dimensions 
+    h_dim = measurement.ndim - 2
+    w_dim = measurement.ndim - 1
+    
+    h_size = measurement.shape[h_dim]
+    w_size = measurement.shape[w_dim]
+    
+    # Create the circular mask
+    mask = create_circular_mask(h_size, w_size, radius, device=measurement.device)
+    inv_mask = ~mask
+
+    # Get quadrants for outer periphery
+    tl_outer, tr_outer, bl_outer, br_outer = quadrant_masks_from_inv(inv_mask)  # each (H, W)
+    
+    # Get quadrants for center circle
+    tl_center, tr_center, bl_center, br_center = quadrant_masks_from_inv(~inv_mask)  # each (H, W)
+
+    # Reshape to flatten all dimensions before spatial dimensions
+    flat_shape = (-1, h_size, w_size)  # All dimensions before h_dim combined
+    flat_measurement = measurement.reshape(flat_shape)
+    
+    # Create tensors to store results for each item in the batch
+    img_center_tl = []
+    img_center_tr = []
+    img_center_bl = []
+    img_center_br = []
+    img_top_left = []
+    img_top_right = []
+    img_bottom_left = []
+    img_bottom_right = []
+    
+    # For each item in the batch
+    for i in range(flat_measurement.shape[0]):
+        img = flat_measurement[i]
+        
+        # Get center quadrants
+        img_center_tl.append(img * tl_center.to(dtype=img.dtype))
+        img_center_tr.append(img * tr_center.to(dtype=img.dtype))
+        img_center_bl.append(img * bl_center.to(dtype=img.dtype))
+        img_center_br.append(img * br_center.to(dtype=img.dtype))
+        
+        # Get peripheral regions
+        img_top_left.append(img * tl_outer.to(dtype=img.dtype))
+        img_top_right.append(img * tr_outer.to(dtype=img.dtype))
+        img_bottom_left.append(img * bl_outer.to(dtype=img.dtype))
+        img_bottom_right.append(img * br_outer.to(dtype=img.dtype))
+    
+    # Stack results into a single tensor
+    tiles = torch.stack([
+        torch.stack(img_center_tl),
+        torch.stack(img_center_tr),
+        torch.stack(img_center_bl),
+        torch.stack(img_center_br),
+        torch.stack(img_top_left),
+        torch.stack(img_top_right),
+        torch.stack(img_bottom_left),
+        torch.stack(img_bottom_right),
+    ], dim=-3)  # tiles = [batch, tiles, H, W]
+    
+    # Note that the last dimension is the tile dimension
+    if reduce == 'mean':
+        return (tiles.sum(dim=(-2,-1)) / tiles.count_nonzero(dim=(-2,-1))).squeeze()
+    elif reduce == 'sum':
+        return (tiles.sum(dim=(-2,-1))).squeeze()
+    elif reduce in (False, None):
+        return tiles
+    else:
+        raise ValueError(f"The current implementation does not support reduce = '{reduce}', please use either 'mean', 'sum', or 'False'")
