@@ -60,9 +60,24 @@ def main(
         eps_c = 1
         run_date = datetime.today().strftime("%Y-%m-%d") #22/04/2026 for new composite form
         seed = 42
+        image_pixel_rescaling = False
+        patch_format = "domain"
+        num_tiles = None
         random.seed(seed)
         np.random.seed(seed)
         torch.manual_seed(seed)
+
+        if patch_format == "domain":
+            sf_quad = 4303
+            sf_cent = 7440
+            temp = torch.Tensor([sf_cent, sf_quad, sf_quad, sf_quad, sf_quad])
+            sf_factor = torch.sqrt(temp)
+            reduction_kwargs = {'radius':0.31}
+        if patch_format == 'square':
+            sf_square = (150/num_tiles)**2
+            temp = torch.Tensor([sf_square]*num_tiles**2)
+            sf_factor = torch.sqrt(temp)
+            reduction_kwargs = {'num_tiles':num_tiles}
 
         if torch.cuda.is_available():
             torch.cuda.manual_seed_all(seed)
@@ -78,6 +93,11 @@ def main(
         logger.info(f'Algorithm: {algo}')
         logger.info(f'Number of iterations: {num_iter}')
         logger.info(f'Number of initial evaluations: {n_init_evals}')
+        logger.info(f'Patch format: {patch_format}')
+        if patch_format == 'square':
+            logger.info(f'Number of tiles: {num_tiles}')
+        logger.info(f'Scale tile factor: {sf_factor}')
+        logger.info(f'Image pixel rescaling (if true, divide by sum pixel values): {image_pixel_rescaling}')
         logger.info(f'--------------------------------------------------------------------------------')
 
 
@@ -131,7 +151,10 @@ def main(
             ground_truth = torch.Tensor(ground_truth)
             # ground_truth = (ground_truth / ground_truth.sum())*overall_scaling_factor #3/18/2026 added overall scaling factor to scale up the image output
             logger.info(f"Scaling ground truth by overall scaling factor: {overall_scaling_factor}")
-            ground_truth = ground_truth*overall_scaling_factor
+            if image_pixel_rescaling:
+                ground_truth = (ground_truth / ground_truth.sum())*overall_scaling_factor
+            else:
+                ground_truth = ground_truth*overall_scaling_factor
             problem_name = f"domain_5seg_mult_factor_obj_adj_newcomposite_eps_base_{eps_base}_eps_c_{eps_c}"
 
         elif isinstance(param_truth, list):
@@ -140,7 +163,10 @@ def main(
                                                   device_simu='gpu')) # abtem takes "cpu" or "gpu"
             # ground_truth = (ground_truth / ground_truth.sum())*overall_scaling_factor #3/18/2026 added overall scaling factor to scale up the image output
             logger.info(f"Scaling ground truth by overall scaling factor: {overall_scaling_factor}")
-            ground_truth = ground_truth*overall_scaling_factor
+            if image_pixel_rescaling:
+                ground_truth = (ground_truth / ground_truth.sum())*overall_scaling_factor
+            else:
+                ground_truth = ground_truth*overall_scaling_factor
             problem_name = f"GT_{param_truth[0]}_{param_truth[1]}_{param_truth[2]}_newcomposite_eps_base_{eps_base}_eps_c_{eps_c}"
         else:
               raise ValueError("param_truth should be a list of 3 floats or a string path to the image.")
@@ -155,16 +181,12 @@ def main(
             ground_truth_original = ground_truth.clone()
             is_noisy_ground_truth = "nonoise"
             problem_name = problem_name + f"_nonoise"
-        sf_quad = 4303
-        sf_cent = 7440
-        temp = torch.Tensor([sf_cent, sf_quad, sf_quad, sf_quad, sf_quad])
-        sf_domain5seg = torch.sqrt(temp)
 
         # OptimizationProblem would keep all the tensor on the specified device
         problem = OptimizationProblem(ground_truth=ground_truth,
                                     output_path='/home/pb482/bott/output/', 
                                     save_results=True, 
-                                    reduction_params={'reduction_type':'domain', 'reduction_kwargs':{'radius':0.31}},
+                                    reduction_params={'reduction_type':patch_format, 'reduction_kwargs':reduction_kwargs},
                                     loss_params={'loss_type':'SSE', 'dp_pow': 1}, 
                                     norm_arr=False,
                                     dim=3, 
@@ -173,7 +195,7 @@ def main(
                                     dtype=torch.float64, 
                                     device=device,
                                     params_abtem = params_abTEM,
-                                    scale_factor=sf_domain5seg,
+                                    scale_factor=sf_factor,
                                     safe_div_th_cnst = [0.2,200],
                                     overall_scaling_factor = overall_scaling_factor
                                     ) # "cpu" or "cuda" for physics simulation
