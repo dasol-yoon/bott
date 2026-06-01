@@ -59,12 +59,14 @@ def main(
         eps_base = 10
         eps_c = 1
         run_date = datetime.today().strftime("%Y-%m-%d") #22/04/2026 for new composite form
+        patch_format = "square"
+        num_tiles =  3 #num_tiles x num_tiles square tiles
+        image_pixel_rescaling = True
         seed = 42
         random.seed(seed)
         np.random.seed(seed)
         torch.manual_seed(seed)
-        patch_format = "square"
-        num_tiles =  3 #num_tiles x num_tiles square tiles
+
         if patch_format == "domain":
             sf_quad = 4303
             sf_cent = 7440
@@ -92,6 +94,8 @@ def main(
         logger.info(f'Number of initial evaluations: {n_init_evals}')
         logger.info(f'Patch format: {patch_format}')
         logger.info(f'Number of tiles: {num_tiles}')
+        logger.info(f'Scale tile factor: {sf_factor}')
+        logger.info(f'Image pixel rescaling (if true, divide by sum pixel values): {image_pixel_rescaling}')
         logger.info(f'--------------------------------------------------------------------------------')
 
 
@@ -145,14 +149,20 @@ def main(
             ground_truth = torch.Tensor(ground_truth)
 
             logger.info(f"Scaling ground truth by overall scaling factor: {overall_scaling_factor}")
-            ground_truth = (ground_truth / ground_truth.sum())*overall_scaling_factor #3/18/2026 added overall scaling factor to scale up the image output
+            if image_pixel_rescaling:
+                ground_truth = (ground_truth / ground_truth.sum())*overall_scaling_factor #3/18/2026 added overall scaling factor to scale up the image output
+            else:
+                ground_truth = ground_truth*overall_scaling_factor
             problem_name = f"EXP_STO38_newcomposite_eps_base_{eps_base}_eps_c_{eps_c}_pixelsum_norm"
 
         elif isinstance(param_truth, list):
             ground_truth = torch.Tensor(simulate_cbed(param_truth[0],param_truth[1],
                                                   param_truth[2], params_abTEM,
                                                   device_simu='gpu')) # abtem takes "cpu" or "gpu"
-            ground_truth = (ground_truth / ground_truth.sum())*overall_scaling_factor #3/18/2026 added overall scaling factor to scale up the image output
+            if image_pixel_rescaling:
+                ground_truth = (ground_truth / ground_truth.sum())*overall_scaling_factor #3/18/2026 added overall scaling factor to scale up the image output
+            else:
+                ground_truth = ground_truth*overall_scaling_factor
             problem_name = f"GT_{param_truth[0]}_{param_truth[1]}_{param_truth[2]}_newcomposite_eps_base_{eps_base}_eps_c_{eps_c}"
         else:
               raise ValueError("param_truth should be a list of 3 floats or a string path to the image.")
@@ -200,6 +210,7 @@ def main(
                     ground_truth_original = ground_truth_original,
                     eps_base = eps_base,
                     eps_c = eps_c,
+                    image_pixel_rescaling = image_pixel_rescaling,
                     )
         else:
             run_one_trial(problem_name=problem_name+'_SSE_dppow1_noNorm_init_'+str(n_init_evals)+'_'+is_noisy_ground_truth+'_overall_scale_factor_'+str(overall_scaling_factor)+'_run_date_'+run_date, 
@@ -214,6 +225,7 @@ def main(
                     ground_truth_original = ground_truth_original,
                     eps_base = eps_base,
                     eps_c = eps_c,
+                    image_pixel_rescaling = image_pixel_rescaling,
                     )
 
 
