@@ -296,9 +296,6 @@ def run_one_trial(
         else:
             image_temp = image_temp*problem.overall_scaling_factor
         logger.info(f'(In BO loop) Image output (max, min) AFTER scaling: ({torch.max(image_temp)}, {torch.min(image_temp)})')  
-        if problem.save_results: #save images
-            image_t = Image.fromarray(image_temp.cpu().numpy()) 
-            image_t.save(image_dir+make_output_filenm(input_param))
 
         # calculate final objective (Loss)
         new_Loss = loss_func(y_simu=image_temp.unsqueeze(0),y_true=measurement_true,reduce=False).unsqueeze(-1) # [1,1]
