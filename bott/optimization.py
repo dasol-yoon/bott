@@ -95,6 +95,7 @@ def run_one_trial(
         ground_truth_original = None,
         eps_base = 10,
         eps_c = 1,
+        image_pixel_rescaling = False,
 )-> None:
     '''Run one trial of BO loop for the given problem (tile pattern) and algorithm
 
@@ -204,7 +205,11 @@ def run_one_trial(
         # Normalize the image output 2/28/2026 pb
         # sums = image_output.sum(dim=(1, 2), keepdim=True)
         # image_output = (image_output / sums)*problem.overall_scaling_factor #3/18/2026 added overall scaling factor to scale up the image output
-        image_output = image_output*problem.overall_scaling_factor
+        if image_pixel_rescaling:
+            image_output = (image_output/image_output.sum())*problem.overall_scaling_factor
+        else:
+            image_output = image_output*problem.overall_scaling_factor
+
         logger.info(f'Image output (max, min) after scaling: ({torch.max(image_output)}, {torch.min(image_output)})')  
 
         # calculate final objective (Loss), this is pixelSSE. Might consider rename SSE_value into pixel_losses, and make reduction_SSE into group_loss.
@@ -283,7 +288,10 @@ def run_one_trial(
         physics_model_runtime.append(time_simu_end-time_simu_start)
         # Normalize the image output 2/28/2026 pb
         # image_temp = (image_temp / image_temp.sum())*problem.overall_scaling_factor #3/18/2026 added overall scaling factor to scale up the image output
-        image_temp = image_temp*problem.overall_scaling_factor
+        if image_pixel_rescaling:
+            image_temp = (image_temp/image_temp.sum())*problem.overall_scaling_factor
+        else:
+            image_temp = image_temp*problem.overall_scaling_factor
         logger.info(f'(In BO loop) Image output (max, min) AFTER scaling: ({torch.max(image_temp)}, {torch.min(image_temp)})')  
         if problem.save_results: #save images
             image_t = Image.fromarray(image_temp.cpu().numpy()) 
