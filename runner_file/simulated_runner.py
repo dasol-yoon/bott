@@ -78,7 +78,6 @@ def main(
         logger.info(f'Algorithm: {algo}')
         logger.info(f'Number of iterations: {num_iter}')
         logger.info(f'Number of initial evaluations: {n_init_evals}')
-        logger.info(f'Noisy ground truth peak: {noisy_ground_truth_peak}')
         logger.info(f'--------------------------------------------------------------------------------')
 
 
