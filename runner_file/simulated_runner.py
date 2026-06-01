@@ -56,7 +56,8 @@ def main(
         """
         #TODO here are parameters to change for different experiments
         overall_scaling_factor = 1000
-        eps_bound = 10
+        eps_base = 10
+        eps_c = 1
         run_date = datetime.today().strftime("%Y-%m-%d") #22/04/2026 for new composite form
         seed = 42
         random.seed(seed)
@@ -72,7 +73,8 @@ def main(
         logger.info(f'Run date: {run_date}')
         logger.info(f'Seed: {seed}')
         logger.info(f'Overall scaling factor: {overall_scaling_factor}')
-        logger.info(f'Epsilon bound: {eps_bound}')
+        logger.info(f'Epsilon bound: {eps_base}')
+        logger.info(f'Epsilon c: {eps_c}')
         logger.info(f'Algorithm: {algo}')
         logger.info(f'Number of iterations: {num_iter}')
         logger.info(f'Number of initial evaluations: {n_init_evals}')
@@ -131,7 +133,7 @@ def main(
             # ground_truth = (ground_truth / ground_truth.sum())*overall_scaling_factor #3/18/2026 added overall scaling factor to scale up the image output
             logger.info(f"Scaling ground truth by overall scaling factor: {overall_scaling_factor}")
             ground_truth = ground_truth*overall_scaling_factor
-            problem_name = f"domain_5seg_mult_factor_obj_adj_newcomposite_eps_bound_{eps_bound}"
+            problem_name = f"domain_5seg_mult_factor_obj_adj_newcomposite_eps_base_{eps_base}_eps_c_{eps_c}"
 
         elif isinstance(param_truth, list):
             ground_truth = torch.Tensor(simulate_cbed(param_truth[0],param_truth[1],
@@ -140,7 +142,7 @@ def main(
             # ground_truth = (ground_truth / ground_truth.sum())*overall_scaling_factor #3/18/2026 added overall scaling factor to scale up the image output
             logger.info(f"Scaling ground truth by overall scaling factor: {overall_scaling_factor}")
             ground_truth = ground_truth*overall_scaling_factor
-            problem_name = f"GT_{param_truth[0]}_{param_truth[1]}_{param_truth[2]}_newcomposite_eps_bound_{eps_bound}"
+            problem_name = f"GT_{param_truth[0]}_{param_truth[1]}_{param_truth[2]}_newcomposite_eps_base_{eps_base}_eps_c_{eps_c}"
         else:
               raise ValueError("param_truth should be a list of 3 floats or a string path to the image.")
         if noisy_ground_truth_peak is not None and noisy_ground_truth_peak > 0:
@@ -188,7 +190,8 @@ def main(
                     device_botorch=device,
                     manual_init_evals = manual_init_evals,
                     ground_truth_original = ground_truth_original,
-                    eps_bound = eps_bound,
+                    eps_base = eps_base,
+                    eps_c = eps_c,
                     )
         else:
             run_one_trial(problem_name=problem_name+'_SSE_dppow1_noNorm_init_'+str(n_init_evals)+'_'+is_noisy_ground_truth+'_overall_scale_factor_'+str(overall_scaling_factor)+'_run_date_'+run_date, 
@@ -201,7 +204,8 @@ def main(
                     dtype=torch.float64,
                     device_botorch=device,  
                     ground_truth_original = ground_truth_original,
-                    eps_bound = eps_bound,
+                    eps_base = eps_base,
+                    eps_c = eps_c,
                     )
 
 
