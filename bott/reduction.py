@@ -309,7 +309,8 @@ def get_domain_tiles(
         return tiles
     else:
         raise ValueError(f"The current implementation does not support reduce = '{reduce}', please use either 'mean', 'sum', or 'False'") 
-    
+
+
 def get_domain_tiles_8quad(
     measurement: torch.Tensor,
     radius: float = 0.3,  # Radius as a fraction of min(height, width)
