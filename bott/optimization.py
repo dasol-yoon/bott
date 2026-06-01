@@ -33,27 +33,19 @@ from bott.utils import time_sync, make_output_filenm, safe_division
 from PIL import Image #20250520
 
 # For new composite to control epsilon behavior (solving for epsilon and delta)
-def solve(pixelSSE_val, patchSSE_val,eps_bound=10):
+def solve(pixelSSE_val, patchSSE_val,eps_base=10,eps_c=1):
     """
     Solve:  min |delta|
-           s.t. |log epsilon| <= 1  (natural log)
+           s.t. |log epsilon| <= eps_c  (base is eps_base)
                 pixel = epsilon*patch + delta
 
     Returns epsilon, delta (same shape as inputs)
     """
     device = pixelSSE_val.device
     dtype  = pixelSSE_val.dtype
-
-    if eps_bound == 10:
-        logging.info(f'Using eps_bound: 10')
-        eps_min = torch.pow(10.0, torch.tensor(-1.0, device=device, dtype=dtype))
-        eps_max = torch.pow(10.0, torch.tensor( 1.0, device=device, dtype=dtype))
-    elif eps_bound == torch.exp(1.0):
-        logging.info(f'Using eps_bound: exp(1.0)')
-        eps_min = torch.exp(torch.tensor(-1.0, device=device, dtype=dtype))
-        eps_max = torch.exp(torch.tensor( 1.0, device=device, dtype=dtype))
-    else:
-        raise ValueError(f'Invalid eps_bound: {eps_bound}')
+    eps_min = torch.pow(eps_base, torch.tensor(-eps_c, device=device, dtype=dtype))
+    eps_max = torch.pow(eps_base, torch.tensor( eps_c, device=device, dtype=dtype))
+    logging.info(f'Using eps_base: {eps_base}, eps_c: {eps_c}, eps_min: {eps_min}, eps_max: {eps_max}')
 
     epsilon = torch.empty_like(pixelSSE_val)
     delta   = torch.empty_like(pixelSSE_val)
@@ -101,7 +93,8 @@ def run_one_trial(
         force_restart:Optional[bool]= False,
         manual_init_evals = None,
         ground_truth_original = None,
-        eps_bound = 10,
+        eps_base = 10,
+        eps_c = 1,
 )-> None:
     '''Run one trial of BO loop for the given problem (tile pattern) and algorithm
 
@@ -230,7 +223,7 @@ def run_one_trial(
             # logging.info(f'Using test linear form for the EICF 2/12/2026')
             # y_value = torch.cat((y_reduction,epsilon,delta),dim=-1) # [n_init, num_tiles+2]#2/11/2026 for new composite to control epsilon behavior
             # y_value = torch.cat((y_reduction,delta),dim=-1) # test linear form 02/12/2026 pb
-            epsilon, delta = solve(pixelSSE_val=pixelLoss, patchSSE_val=reductionLoss,eps_bound=eps_bound) #2/11/2026 for new composite to control epsilon behavior
+            epsilon, delta = solve(pixelSSE_val=pixelLoss, patchSSE_val=reductionLoss,eps_base=eps_base,eps_c=eps_c) #2/11/2026 for new composite to control epsilon behavior
             y_value = torch.cat((y_reduction,epsilon,delta),dim=-1) # 02/25/2026 use epsilon for epsilon
             logging.info(f'(For EICF) Initial intermediate outputs (patch, epsilon, delta): {y_value}') 
             
@@ -309,7 +302,7 @@ def run_one_trial(
                                     y_true=reduction_true,
                                     reduce=False).unsqueeze(0) # [1,] 02/17/2026
             logging.info(f'reductionLoss (patch SSE) for new input: {reductionLoss}')
-            epsilon, delta = solve(pixelSSE_val=new_Loss, patchSSE_val=reductionLoss,eps_bound=eps_bound) #2/11/2026 for new composite to control epsilon behavior
+            epsilon, delta = solve(pixelSSE_val=new_Loss, patchSSE_val=reductionLoss,eps_base=eps_base,eps_c=eps_c) #2/11/2026 for new composite to control epsilon behavior
             y_temp = torch.cat((y_reduction.unsqueeze(0),epsilon,delta),dim=-1) #02/25/2026 use epsilon for epsilon
             logging.info(f'y_temp for new input (patch, epsilon, delta) {y_temp}')
 
