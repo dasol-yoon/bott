@@ -1,15 +1,13 @@
 #!/bin/bash
-#SBATCH --job-name=sim4          # Job name
+#SBATCH --job-name=STO38          # Job name
 #SBATCH --mail-type=END,FAIL                      # Request status by email 
 #SBATCH --mail-user=pb482@cornell.edu        # Email address to send results to.
 #SBATCH --nodes=1                                 
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
-#SBATCH --time=24:00:00
-#SBATCH --mem=32GB
+#SBATCH --time=04:00:00
 #SBATCH --partition=default_partition        # Request partition
-#SBATCH --gres=gpu:1                  # Type/number of GPUs needed
-#SBATCH --exclude=jjs533-compute-03,lil-compute-05,bhattacharjee-compute-02,unicorn-compute-05,desa-compute-01,unicorn-compute-04,seo-compute-02,shmatikov-compute-01,taylor-compute-01
+#SBATCH --exclude=jjs533-compute-03,lil-compute-05,bhattacharjee-compute-02,unicorn-compute-05,desa-compute-01,unicorn-compute-04,seo-compute-02,shmatikov-compute-01,taylor-compute-01,sablab-gpu-09
 # Parse arguments
 param1='/home/pb482/bott/data/STO38nm_1.5_-1.5mrad_mag.tiff'
 
@@ -21,6 +19,10 @@ n_init_evals=$4
 
 echo "Running trial $trial with algo $algo, num_iter $num_iter"
 echo "param_truth: ($param1)"
+echo "Job ID: $SLURM_JOB_ID"
+echo "Node: $(hostname)"
+echo "Node list: $SLURM_JOB_NODELIST"
+echo "Started at: $(date)"
 
 /home/pb482/miniconda3/envs/bott/bin/python ./runner_file/STO38_runner.py \
     --trial $trial \

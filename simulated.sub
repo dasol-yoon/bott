@@ -8,7 +8,7 @@
 #SBATCH --time=04:00:00
 #SBATCH --partition=frazier        # Request partition
 #SBATCH --gres=gpu:nvidia_geforce_rtx_3090:1
-#SBATCH --exclude=jjs533-compute-03,lil-compute-05,bhattacharjee-compute-02,unicorn-compute-05,desa-compute-01,unicorn-compute-04,seo-compute-02,shmatikov-compute-01,taylor-compute-01,dgx2-compute-03,sablab-gpu-09,goodfellow,harpo,dgx2-compute-04,rush-compute-01,owens-compute-01,badfellow,eas-shared-compute-01,genai-large-01    
+#SBATCH --exclude=jjs533-compute-03,lil-compute-05,bhattacharjee-compute-02,unicorn-compute-05,desa-compute-01,unicorn-compute-04,seo-compute-02,shmatikov-compute-01,taylor-compute-01,dgx2-compute-03,sablab-gpu-09,goodfellow,harpo,dgx2-compute-04,rush-compute-01,owens-compute-01,badfellow,eas-shared-compute-01,genai-large-01,abdelfattah-compute-03    
 
 trial=$1
 algo=$2
