@@ -7,7 +7,8 @@
 #SBATCH --cpus-per-task=4
 #SBATCH --time=04:00:00
 #SBATCH --partition=default_partition        # Request partition
-#SBATCH --exclude=jjs533-compute-03,lil-compute-05,bhattacharjee-compute-02,unicorn-compute-05,desa-compute-01,unicorn-compute-04,seo-compute-02,shmatikov-compute-01,taylor-compute-01,sablab-gpu-09
+#SBATCH --gres=gpu:1
+#SBATCH --exclude=jjs533-compute-03,lil-compute-05,bhattacharjee-compute-02,unicorn-compute-05,desa-compute-01,unicorn-compute-04,seo-compute-02,shmatikov-compute-01,taylor-compute-01,sablab-gpu-09,snavely-cpu-04,tripods-compute-02,goodfellow,rush-compute-01,eas-shared-compute-01
 # Parse arguments
 param1='/home/pb482/bott/data/STO38nm_1.5_-1.5mrad_mag.tiff'
 
