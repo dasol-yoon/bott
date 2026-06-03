@@ -61,8 +61,7 @@ def main(
         run_date = datetime.today().strftime("%Y-%m-%d") #22/04/2026 for new composite form
         seed = 42
         image_pixel_rescaling = False
-        patch_format = "domain"
-        num_tiles = None
+        patch_format = "square"
         random.seed(seed)
         np.random.seed(seed)
         torch.manual_seed(seed)
@@ -73,11 +72,17 @@ def main(
             temp = torch.Tensor([sf_cent, sf_quad, sf_quad, sf_quad, sf_quad])
             sf_factor = torch.sqrt(temp)
             reduction_kwargs = {'radius':0.31}
-        if patch_format == 'square':
+        elif patch_format == 'square':
+            num_tiles =  3 #num_tiles x num_tiles square tiles for square
             sf_square = (150/num_tiles)**2
             temp = torch.Tensor([sf_square]*num_tiles**2)
             sf_factor = torch.sqrt(temp)
             reduction_kwargs = {'num_tiles':num_tiles}
+        elif patch_format == 'domain8quad':
+            temp = torch.Tensor([1763., 1859., 1859., 1959., 4321., 4303., 4303., 4282])
+            sf_factor = torch.sqrt(temp)
+            reduction_kwargs = {'radius':0.31, 'reduce': 'mean'}
+
 
         if torch.cuda.is_available():
             torch.cuda.manual_seed_all(seed)

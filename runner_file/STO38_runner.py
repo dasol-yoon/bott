@@ -59,25 +59,28 @@ def main(
         eps_base = 10
         eps_c = 1
         run_date = datetime.today().strftime("%Y-%m-%d") #22/04/2026 for new composite form
-        patch_format = "square"
-        num_tiles =  3 #num_tiles x num_tiles square tiles
+        patch_format = "domain8quad"
         image_pixel_rescaling = True
         seed = 42
         random.seed(seed)
         np.random.seed(seed)
         torch.manual_seed(seed)
-
         if patch_format == "domain":
             sf_quad = 4303
             sf_cent = 7440
             temp = torch.Tensor([sf_cent, sf_quad, sf_quad, sf_quad, sf_quad])
             sf_factor = torch.sqrt(temp)
             reduction_kwargs = {'radius':0.31}
-        if patch_format == 'square':
+        elif patch_format == 'square':
+            num_tiles =  3 #num_tiles x num_tiles square tiles for square
             sf_square = (150/num_tiles)**2
             temp = torch.Tensor([sf_square]*num_tiles**2)
             sf_factor = torch.sqrt(temp)
             reduction_kwargs = {'num_tiles':num_tiles}
+        elif patch_format == 'domain8quad':
+            temp = torch.Tensor([1763., 1859., 1859., 1959., 4321., 4303., 4303., 4282])
+            sf_factor = torch.sqrt(temp)
+            reduction_kwargs = {'radius':0.31, 'reduce': 'mean'}
         if torch.cuda.is_available():
             torch.cuda.manual_seed_all(seed)
         logger.info(f'--------------------------------------------------------------------------------')
@@ -93,7 +96,8 @@ def main(
         logger.info(f'Number of iterations: {num_iter}')
         logger.info(f'Number of initial evaluations: {n_init_evals}')
         logger.info(f'Patch format: {patch_format}')
-        logger.info(f'Number of tiles: {num_tiles}')
+        if patch_format == 'square':
+            logger.info(f'Number of tiles: {num_tiles}')
         logger.info(f'Scale tile factor: {sf_factor}')
         logger.info(f'Image pixel rescaling (if true, divide by sum pixel values): {image_pixel_rescaling}')
         logger.info(f'--------------------------------------------------------------------------------')
