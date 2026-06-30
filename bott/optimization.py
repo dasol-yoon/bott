@@ -133,7 +133,7 @@ def run_one_trial(
     if objective is None:
         #TODO: Always check if the bounds are correct for the configuration you are using.
         logging.info(f'(FOR EICF) Using pixelSSE(x) = patchSSE(x)*epsilon(x) + delta(x) composite form, where epsilon(x) and delta(x) are from solving minimization problem! Epsilon(x) is clipped to [0.1, 10]')
-        objective = GenericMCObjective(lambda Y, X=None: -1*((loss_func(Y[...,:-2].to(device), reduction_true.to(device),reduce=True)*torch.clamp(Y[...,-2], 0.1, 10))+Y[...,-1])) #3/18/2026 added overall scaling factor to scale up the image output
+        objective = GenericMCObjective(lambda Y, X=None: -1*((loss_func(Y[...,:-2].to(device), reduction_true.to(device),reduce=True)*torch.clamp(Y[...,-2], eps_base**(-eps_c), eps_base**(eps_c)))+Y[...,-1])) #3/18/2026 added overall scaling factor to scale up the image output
         
         # logging.info(f'Using pixelSSE(x) = patchSSE(x)*exp(log(epsilon(x))) + delta(x) composite form, where epsilon(x) and delta(x) are from solving minimization problem! Epsilon(x) is clipped to [0.1, 10]')
         # objective = GenericMCObjective(lambda Y, X=None: -1*((loss_func(Y[...,:-2].to(device), reduction_true.to(device),reduce=True)*torch.exp(Y[...,-2])+Y[...,-1])) )#for pixel=patch*exp(log(epsilon))+delta form 02/17/2026 pb
@@ -206,7 +206,8 @@ def run_one_trial(
         # sums = image_output.sum(dim=(1, 2), keepdim=True)
         # image_output = (image_output / sums)*problem.overall_scaling_factor #3/18/2026 added overall scaling factor to scale up the image output
         if image_pixel_rescaling:
-            image_output = (image_output/image_output.sum())*problem.overall_scaling_factor
+            sums = image_output.sum(dim=(1, 2), keepdim=True)
+            image_output = (image_output/sums)*problem.overall_scaling_factor
         else:
             image_output = image_output*problem.overall_scaling_factor
 
@@ -292,7 +293,7 @@ def run_one_trial(
         # Normalize the image output 2/28/2026 pb
         # image_temp = (image_temp / image_temp.sum())*problem.overall_scaling_factor #3/18/2026 added overall scaling factor to scale up the image output
         if image_pixel_rescaling:
-            image_temp = (image_temp/image_temp.sum())*problem.overall_scaling_factor
+            image_temp = (image_temp / image_temp.sum())*problem.overall_scaling_factor
         else:
             image_temp = image_temp*problem.overall_scaling_factor
         logger.info(f'(In BO loop) Image output (max, min) AFTER scaling: ({torch.max(image_temp)}, {torch.min(image_temp)})')  
