@@ -275,7 +275,7 @@ def run_one_trial(
         # Append and concat new values       
         acqf_vals.append(acqf_val)
         acqf_runtime.append(time_sample_end - time_sample_start)
-        gp_runtime.append(time_model_end - time_init_start)
+        gp_runtime.append(time_model_end - time_model_start)
         X = torch.cat((X, new_x),dim=0)
         
         # Run physical model with a new_x
