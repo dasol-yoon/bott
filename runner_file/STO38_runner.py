@@ -59,7 +59,7 @@ def main(
         eps_base = 10
         eps_c = 1
         run_date = datetime.today().strftime("%Y-%m-%d") #22/04/2026 for new composite form
-        patch_format = "domain8quad"
+        patch_format = "square"
         image_pixel_rescaling = True
         seed = 42
         random.seed(seed)
