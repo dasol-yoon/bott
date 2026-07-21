@@ -1,0 +1,34 @@
+#!/bin/bash
+#SBATCH --job-name=HFO          # Job name
+#SBATCH --mail-type=END,FAIL                      # Request status by email 
+#SBATCH --mail-user=pb482@cornell.edu        # Email address to send results to.
+#SBATCH --nodes=1                                 
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=4
+#SBATCH --time=04:00:00
+#SBATCH --partition=default_partition        # Request partition
+#SBATCH --gres=gpu:1
+#SBATCH --exclude=jjs533-compute-03,lil-compute-05,bhattacharjee-compute-02,unicorn-compute-05,desa-compute-01,unicorn-compute-04,seo-compute-02,shmatikov-compute-01,taylor-compute-01,dgx2-compute-03,sablab-gpu-09,goodfellow,harpo,dgx2-compute-04,rush-compute-01,owens-compute-01,badfellow,eas-shared-compute-01,genai-large-01,abdelfattah-compute-03,dgx2-compute-03,abdelfattah-compute-02    
+
+# Parse arguments
+param1='/home/pb482/bott/data/pacbed_1_deadpix_rot_crop.tiff'
+
+# Parse arguments
+trial=$1
+algo=$2
+num_iter=$3
+n_init_evals=$4
+
+echo "Running trial $trial with algo $algo, num_iter $num_iter"
+echo "param_truth: ($param1)"
+echo "Job ID: $SLURM_JOB_ID"
+echo "Node: $(hostname)"
+echo "Node list: $SLURM_JOB_NODELIST"
+echo "Started at: $(date)"
+
+/home/pb482/miniconda3/envs/bott/bin/python ./runner_file/HFO_runner.py \
+    --trial $trial \
+    --algo $algo \
+    --num_iter $num_iter \
+    --param_truth_path $param1 \
+    --n_init_evals $n_init_evals

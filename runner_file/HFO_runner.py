@@ -41,7 +41,7 @@ def main(
         noisy_ground_truth_peak: float | None = None,
         manual_init_evals: list[list[float]] | None = None,
 ) -> None: 
-        """Run one replication for GaO experiment   
+        """Run one replication for HFO experiment   
 
         Args:
             trial: Seed of the trial.
@@ -73,7 +73,7 @@ def main(
             reduction_kwargs = {'radius':0.31}
         elif patch_format == 'square':
             num_tiles =  3 #num_tiles x num_tiles square tiles for square
-            sf_square = (171/num_tiles)**2 # we have 171x171 image
+            sf_square = (201/num_tiles)**2 # we have 201x201 image
             temp = torch.Tensor([sf_square]*num_tiles**2)
             sf_factor = torch.sqrt(temp)
             reduction_kwargs = {'num_tiles':num_tiles}
@@ -84,7 +84,7 @@ def main(
         if torch.cuda.is_available():
             torch.cuda.manual_seed_all(seed)
         logger.info(f'--------------------------------------------------------------------------------')
-        logger.info(f'Running GaO experiment with configurations below:')
+        logger.info(f'Running HFO experiment with configurations below:')
         logger.info(f'Ground truth: {param_truth}')
         logger.info(f'Noisy ground truth peak: {noisy_ground_truth_peak}')
         logger.info(f'Run date: {run_date}')
@@ -103,41 +103,41 @@ def main(
         logger.info(f'--------------------------------------------------------------------------------')
 
         params_abTEM = {#todo: find a better way to enter parameters
-            # # Device configuration
-            # "device_abtem": 'gpu',#"cpu",
+                # # Device configuration
+                # "device_abtem": 'gpu',#"cpu",
 
-            # Crystal structure input
-            "path_crystal": "/home/pb482/bott/data/one_layer_beta_GaO.cif",
+                # Crystal structure input
+                "path_crystal": "/home/pb482/bott/data/HfO2_Pca21.cif",
 
-            # Potential parameters
-            "potential_extent_x": 48,  # Angstrom
-            "potential_extent_y": 48,  # Angstrom
-            "lateral_sampling": 0.2 * 2 / 3,  # Angstrom
-            "vertical_sampling": 2.9,
-            "potential_parametrization": "lobato",  # or "kirkland"
-            "potential_projection": "finite",       # or "infinite"
+                # Potential parameters
+                "potential_extent_x": 48,  # Angstrom
+                "potential_extent_y": 48,  # Angstrom
+                "lateral_sampling": 0.08,  # Angstrom
+                "vertical_sampling": 2.6,
+                "potential_parametrization": "lobato",  # or "kirkland"
+                "potential_projection": "finite",       # or "infinite"
 
-            # Phonon parameters
-            "random_seed": 42,
-            "use_frozen_phonon": False,
-            "num_phonon_configs": 5,
-            "phonon_sigma": {
-                'Hf': 0.1,
-                'O': 0.1,
-            },
+                # Phonon parameters
+                "random_seed": 42,
+                "use_frozen_phonon": True,
+                "num_phonon_configs": 5,
+                "phonon_sigma": {
+                    'Hf': 0.1,
+                    'O': 0.1,
+                },
 
-            # Probe parameters
-            "energy": 120e3,  # in eV
-            "convergence_angle": 30.0,  # mrad
-            "df": 0,
-            "aberrations": {},
+                # Probe parameters
+                "energy": 300e3,  # in eV
+                "convergence_angle": 30.0,  # mrad
+                "df": 0,
+                "aberrations": {},
 
-            "detector_angle": 58.5, #'cutoff', # mrad
+                "detector_angle": 39, #'cutoff', # mrad
 
-            # Scan parameters
-            "scan_step_size": 0.3,  # angstrom
-            "return_pacbed": True,
-        }
+                # Scan parameters
+                "scan_step_size": 0.4,  # angstrom
+                "return_pacbed": True,
+            }
         # params_abTEM = {
 
         #         # Crystal structure input
@@ -179,7 +179,9 @@ def main(
         if isinstance(param_truth, str):
             ground_truth = load_tif(param_truth)
 
-            imgshape = simulate_cbed(1,0,0, params_abTEM).shape
+            # imgshape = simulate_cbed(1,0,0, params_abTEM).shape
+            imgshape = simulate_cbed(1,0,0, params_abTEM,scan_coords=[[20,20],[25.1,25.1]]).shape
+
             originshape = ground_truth.shape
             #todo: the guide should ensure the experimental pacbed to be centered & square.
             ground_truth = ndimage.zoom(ground_truth, 
@@ -192,7 +194,7 @@ def main(
                 ground_truth = (ground_truth / ground_truth.sum())*overall_scaling_factor #3/18/2026 added overall scaling factor to scale up the image output
             else:
                 ground_truth = ground_truth*overall_scaling_factor
-            problem_name = f"EXP_GaO_newcomposite_eps_base_{eps_base}_eps_c_{eps_c}_pixelsum_norm"
+            problem_name = f"EXP_HFO_newcomposite_eps_base_{eps_base}_eps_c_{eps_c}_pixelsum_norm"
 
         elif isinstance(param_truth, list):
             ground_truth = torch.Tensor(simulate_cbed(param_truth[0],param_truth[1],
@@ -220,21 +222,39 @@ def main(
 
         # OptimizationProblem would keep all the tensor on the specified device
         problem = OptimizationProblem(ground_truth=ground_truth,
-                                    output_path='/home/pb482/bott/output/', 
-                                    save_results=True, 
-                                    reduction_params={'reduction_type':patch_format, 'reduction_kwargs':reduction_kwargs},
-                                    loss_params={'loss_type':'SSE', 'dp_pow': 1}, 
-                                    norm_arr=False,
-                                    dim=3, 
-                                    bounds=[(5,500), (-20, 20), (-20, 20)],
-                                    noise_std=0,
-                                    dtype=torch.float64, 
-                                    device=device,
-                                    params_abtem = params_abTEM,
-                                    scale_factor=sf_factor,
-                                    safe_div_th_cnst = [0.2,200],
-                                    overall_scaling_factor = overall_scaling_factor
-                                    ) # "cpu" or "cuda" for physics simulation
+                            output_path='/home/pb482/bott/output/', 
+                            save_results=True, 
+                            reduction_params={'reduction_type':patch_format, 
+                                            'reduction_kwargs':reduction_kwargs},
+                            loss_params={'loss_type':'SSE', 'dp_pow': 1}, 
+                            norm_arr=False,
+                            dim=3, 
+                            bounds=[(10,700), (-10, 10), (-10,10)],
+                            noise_std=0,
+                            dtype=torch.float64, 
+                            device=device,
+                            params_abtem = params_abTEM,
+                            scale_factor=sf_factor,
+                            safe_div_th_cnst = [0.2,200],
+                            scan_coords = [[20,20],[25.1,25.1]],
+                            overall_scaling_factor = overall_scaling_factor,
+                            ) # "cpu" or "cuda" for physics simulation
+        # problem = OptimizationProblem(ground_truth=ground_truth,
+        #                             output_path='/home/pb482/bott/output/', 
+        #                             save_results=True, 
+        #                             reduction_params={'reduction_type':patch_format, 'reduction_kwargs':reduction_kwargs},
+        #                             loss_params={'loss_type':'SSE', 'dp_pow': 1}, 
+        #                             norm_arr=False,
+        #                             dim=3, 
+        #                             bounds=[(5,500), (-20, 20), (-20, 20)],
+        #                             noise_std=0,
+        #                             dtype=torch.float64, 
+        #                             device=device,
+        #                             params_abtem = params_abTEM,
+        #                             scale_factor=sf_factor,
+        #                             safe_div_th_cnst = [0.2,200],
+        #                             overall_scaling_factor = overall_scaling_factor
+        #                             ) # "cpu" or "cuda" for physics simulation
         if manual_init_evals is not None:
             run_one_trial(problem_name=problem_name+'_SSE_dppow1_noNorm_init_'+str(n_init_evals)+'_manual_'+str(len(manual_init_evals))+'_'+is_noisy_ground_truth+'_overall_scale_factor_'+str(overall_scaling_factor)+'_run_date_'+run_date, 
                     problem=problem, 
