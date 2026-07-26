@@ -1,6 +1,6 @@
 #!/bin/sh
 
-for trial in $(seq 1 1 1)
+for trial in $(seq 1 1 10)
 do
     for algo in EI EICF KG Random
     do
