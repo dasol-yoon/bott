@@ -31,6 +31,8 @@ from bott.ts_acqf import ThompsonSampling
 from bott.utils import time_sync, make_output_filenm, safe_division
 
 from PIL import Image #20250520
+from scipy.ndimage import gaussian_filter
+
 
 # For new composite to control epsilon behavior (solving for epsilon and delta)
 def solve(pixelSSE_val, patchSSE_val,eps_base=10,eps_c=1):
@@ -199,6 +201,8 @@ def run_one_trial(
         input_params = X.tolist()
         logger.info(f'Initial evaluations ({X.shape[0]} points): {X}') #20260210
         outputs_np = np.array([problem.get_physics_simu(*param,params_abtem_alt=params_abTEM,device_alt=problem.device) for param in input_params])
+        logging.info(f'applying gaussian filter to the image output 7/23/2026')
+        outputs_np = gaussian_filter(outputs_np, sigma=1) # added gaussian filter to the image output 7/23/2026
         image_output = torch.tensor(outputs_np, dtype=dtype, device=device)
         logging.info(f'Overall scaling factor applied (to bring up the scale of the image output): {problem.overall_scaling_factor}')
         logging.info(f'Image output (max, min) before scaling: ({torch.max(image_output)}, {torch.min(image_output)})')
@@ -282,7 +286,13 @@ def run_one_trial(
         # Run physical model with a new_x
         input_param = new_x.tolist()[0] # [value0, value1, value2]
         time_simu_start = time_sync()
-        image_temp = torch.from_numpy(problem.get_physics_simu(*input_param,params_abtem_alt=params_abTEM,device_alt=problem.device)).to(dtype=dtype, device=device)
+        image_temp = problem.get_physics_simu(*input_param,params_abtem_alt=params_abTEM,device_alt=problem.device)
+        logging.info(f'applying gaussian filter to the image output 7/23/2026')
+        image_temp = gaussian_filter(image_temp, sigma=1) # added gaussian filter to the image output 7/23/2026
+        image_temp = torch.from_numpy(image_temp).to(
+            dtype=dtype,
+            device=device,
+        )
         time_simu_end = time_sync()
         if problem.save_results: #save images
             image_t = Image.fromarray(image_temp.cpu().numpy()) 
