@@ -10,7 +10,14 @@ This package uses abTEM to simulate PACBEDs, which are used as input images duri
 3. Run the following line to create an individual Python environment with all necessary dependencies assuming you have CUDA-supported NVIDIA GPU.
 
 ```bash
-conda env create -f environment_bott_general.yml
+conda env create -f environment.yml
+conda activate bott
+```
+
+If your device doesn't have CUDA support:
+```bash
+conda env create -f environment-cpu.yml
+conda activate bott-cpu
 ```
 
 Alternatively, you can also manually specify the packages for more flexibility (If your system does not have an nvidia GPU, remove these keywords(`cupy`, `pytorch-cuda=12.1`) from the following or refer to the line further below):
