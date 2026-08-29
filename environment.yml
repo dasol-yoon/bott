@@ -1,17 +1,22 @@
 name: bott
 channels:
-  - pytorch
-  - nvidia
   - conda-forge
-  - defaults
 dependencies:
-  - abtem
-  - botorch=0.13
-  - cupy
-  - gpytorch
-  - matplotlib
   - python=3.11
-  - pytorch-cuda=12.1
-  - pytorch=2.1.0
+  - pytorch=*=cuda12*  # must pin the build: a bare `- pytorch` can resolve to CPU
+  - cupy               # array backend for abTEM device_simu='gpu'
+  - cuda-nvvm-tools    # libNVVM, needed by numba.cuda inside abTEM (GPU only)
+  - numpy<2
+  - abtem=1.0.6
+  - ase
+  - dask
+  - botorch=0.13
+  - gpytorch
+  - scipy
+  - matplotlib
   - tifffile
+  - pillow
+  - pyyaml
+  - psutil
   - ipykernel
+  - ipympl
