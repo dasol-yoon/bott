@@ -1,7 +1,9 @@
-#edited 20250513 cluster
+import random
+import numpy as np
+import json
 import logging
 import warnings
-
+from bott.utils import add_poisson_noise
 import torch
 from botorch.exceptions import InputDataWarning
 
@@ -12,6 +14,7 @@ from bott.io import load_img, load_tif
 from bott.utils import print_system_info
 
 from scipy import ndimage
+
 
 logging.basicConfig(level=logging.INFO,  # Adjust log level as needed (DEBUG, INFO, etc.)
                     format='%(asctime)s - %(levelname)s - %(message)s')
@@ -28,8 +31,10 @@ def main(
         trial: int,
         algo: str,
         num_iter: int,
+        n_init_evals: int,
         param_truth: str | list[float],
-        nt = 1,
+        noisy_ground_truth_peak: float | None = None,
+        manual_init_evals: list[list[float]] | None = None,
 ) -> None: 
         """Run one replication for the dropwave function network test problem
 
@@ -44,6 +49,17 @@ def main(
         Returns:
             None.
         """
+        overall_scaling_factor = 1000
+        eps_bound = 10
+        run_date = "May12"
+        seed = 42
+        random.seed(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(seed)
+
         logger.info(f'domain knowledge 5 segment tile experiment. Branch Multiplied scale factor test')
 
         params_abTEM = {#todo: find a better way to enter parameters
@@ -51,13 +67,13 @@ def main(
                 # "device_abtem": 'gpu',#"cpu",
 
                 # Crystal structure input
-                "path_crystal": "/home/pb482/bott/one_layer_beta_GaO.cif",
+                "path_crystal": "/home/fs01/dy327/bott-data/data/SrTiO3.cif",
 
                 # Potential parameters
-                "potential_extent_x": 48,  # Angstrom
-                "potential_extent_y": 48,  # Angstrom
+                "potential_extent_x": 62.6,  # Angstrom
+                "potential_extent_y": 62.6,  # Angstrom
                 "lateral_sampling": 0.2 * 2 / 3,  # Angstrom
-                "vertical_sampling": 2.9,
+                "vertical_sampling": 2,
                 "potential_parametrization": "lobato",  # or "kirkland"
                 "potential_projection": "finite",       # or "infinite"
 
@@ -66,17 +82,18 @@ def main(
                 "use_frozen_phonon": False,
                 "num_phonon_configs": 5,
                 "phonon_sigma": {
-                    'Ga': 0.1,
-                    'O': 0.1,
+                    'Sr': 0.088,
+                    'Ti': 0.0746,
+                    'O': 0.0963,
                 },
 
                 # Probe parameters
-                "energy": 120e3,  # in eV
-                "convergence_angle": 30.0,  # mrad
+                "energy": 200e3,  # in eV
+                "convergence_angle": 19.1,  # mrad
                 "df": 0,
                 "aberrations": {},
 
-                "detector_angle": 41, #'cutoff', # mrad
+                "detector_angle": 31, #'cutoff', # mrad
 
                 # Scan parameters
                 "scan_step_size": 0.3,  # angstrom
@@ -85,17 +102,17 @@ def main(
         print_system_info()
         #todo: make it into a function and put it in io.py
         if isinstance(param_truth, str):
-              ground_truth = load_tif(param_truth)
+              ground_truth = load_img(param_truth)
 
-              imgshape = simulate_cbed(1,0,0, params_abTEM,scan_coords=[[18,18],[30,30]]).shape
+              imgshape = simulate_cbed(1,0,0, params_abTEM).shape
               originshape = ground_truth.shape
               #todo: the guide should ensure the experimental pacbed to be centered & square.
               ground_truth = ndimage.zoom(ground_truth, 
                                           (imgshape[0]/originshape[0], 
                                            imgshape[1]/originshape[1]), order=3)
               ground_truth = torch.Tensor(ground_truth)
-              problem_name = f"domain_5seg_mult_factor_obj_adj"
-              logger.info(f'max of loaded image: {torch.max(ground_truth)}')
+              ground_truth = (ground_truth / ground_truth.sum())*overall_scaling_factor #3/18/2026 added overall scaling factor to scale up the image output
+              problem_name = f"EXP_sto_quad8_eps_{eps_bound}"
 
         elif isinstance(param_truth, list):
               ground_truth = torch.Tensor(simulate_cbed(param_truth[0],param_truth[1],
@@ -104,41 +121,70 @@ def main(
               problem_name = f"GT_{param_truth[0]}_{param_truth[1]}_{param_truth[2]}"
         else:
               raise ValueError("param_truth should be a list of 3 floats or a string path to the image.")
+        if noisy_ground_truth_peak is not None and noisy_ground_truth_peak > 0:
+            ground_truth_original = ground_truth.clone()
+            logger.info(f"Considering noisy ground truth with peak {noisy_ground_truth_peak}")
+            logger.info(f"ground_truth (max, min) before adding noise: ({torch.max(ground_truth)}, {torch.min(ground_truth)}) with shape {ground_truth.shape}")
+            ground_truth = add_poisson_noise(image=ground_truth, peak=noisy_ground_truth_peak)
+            logger.info(f"ground_truth (max, min) after adding noise: ({torch.max(ground_truth)}, {torch.min(ground_truth)}) with shape {ground_truth.shape}")
+            is_noisy_ground_truth = f"noisy_{noisy_ground_truth_peak}"
+            problem_name = problem_name + f"_noisy_{noisy_ground_truth_peak}"
+        else:
+            ground_truth_original = ground_truth.clone()
+            logger.info("No noisy ground truth considered")
+            is_noisy_ground_truth = "nonoise"
+            problem_name = problem_name + f"_nonoise"
 
-        sf_quad = 2339
-        sf_cent = 6376
-        temp = torch.Tensor([sf_cent, sf_quad, sf_quad, sf_quad, sf_quad])
+        temp = torch.Tensor([1763., 1859., 1859., 1959., 4321., 4303., 4303., 4282])
         sf_domain5seg = torch.sqrt(temp)
 
         # OptimizationProblem would keep all the tensor on the specified device
         problem = OptimizationProblem(ground_truth=ground_truth,
-                                    output_path='/home/pb482/bott/output_experimental/', 
+                                    output_path='/home/fs01/dy327/bott-data/log/20260601_sto_exp_quad/', 
                                     save_results=True, 
-                                    reduction_params={'reduction_type':'domain', 'reduction_kwargs':{'radius':0.36}},
+                                    reduction_params={'reduction_type':'domain8quad', 
+                                                    'reduction_kwargs':{'radius':0.31}},
                                     loss_params={'loss_type':'SSE', 'dp_pow': 1}, 
                                     norm_arr=False,
                                     dim=3, 
-                                    bounds=[(100,300), (-10, 0), (-10, 0)],
+                                    bounds=[(5,500), (-10, 10), (-10, 10)],
                                     noise_std=0,
                                     dtype=torch.float64, 
                                     device=device,
                                     params_abtem = params_abTEM,
                                     scale_factor=sf_domain5seg,
                                     safe_div_th_cnst = [0.2,200],
-                                    scan_coords = [[18,18],[30,30]],
+                                    overall_scaling_factor = overall_scaling_factor,
                                     ) # "cpu" or "cuda" for physics simulation
-        logging.info(f"running 6-domain_multiplier_power_SSE.py")
-        run_one_trial(problem_name=problem_name+'_41mrad', 
+
+        if manual_init_evals is not None:
+            logger.info(f'\nmanual_init_evals {manual_init_evals}')
+            run_one_trial(problem_name=problem_name+'_SSE_dppow1_noNorm_init_'+str(n_init_evals)+'_manual_'+str(len(manual_init_evals))+'_'+is_noisy_ground_truth+'_overall_scale_factor_'+str(overall_scaling_factor)+'_run_date_'+run_date, 
                     problem=problem, 
                     algo=algo, 
                     trial=trial, 
-                    n_init_evals=7, 
+                    n_init_evals=n_init_evals, 
                     max_iter=num_iter, 
                     objective=None,
                     dtype=torch.float64,
-                    device_botorch=device
+                    device_botorch=device,
+                    manual_init_evals = manual_init_evals,
+                    ground_truth_original = ground_truth_original,
+                    eps_bound = eps_bound,
                     )
-
+        else:
+            run_one_trial(problem_name=problem_name+'_SSE_dppow1_noNorm_init_'+str(n_init_evals)+'_'+is_noisy_ground_truth+'_overall_scale_factor_'+str(overall_scaling_factor)+'_run_date_'+run_date, 
+                    problem=problem, 
+                    algo=algo, 
+                    trial=trial,
+                    n_init_evals=n_init_evals, 
+                    max_iter=num_iter, 
+                    objective=None,
+                    dtype=torch.float64,
+                    device_botorch=device,  
+                    ground_truth_original = ground_truth_original,
+                    eps_bound = eps_bound,
+                    )
 
 if __name__ == "__main__":
     args = parse()
