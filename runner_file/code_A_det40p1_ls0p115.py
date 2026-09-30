@@ -1,0 +1,226 @@
+#edited 20250513 cluster
+import random
+import numpy as np
+from datetime import datetime
+import json
+import logging
+import warnings
+from bott.utils import add_poisson_noise
+import torch
+from botorch.exceptions import InputDataWarning
+
+from bott.optimization import run_one_trial, parse
+from bott.physics_models import simulate_cbed
+from bott.problem import OptimizationProblem
+from bott.io import load_img, load_tif
+from bott.utils import print_system_info
+
+from scipy import ndimage
+
+logging.basicConfig(level=logging.INFO,  # Adjust log level as needed (DEBUG, INFO, etc.)
+                    format='%(asctime)s - %(levelname)s - %(message)s')
+
+logger = logging.getLogger(__name__)  # Get a logger for the current module
+# logger.setLevel(logging.INFO)
+# logger.handlers.pop()
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+logger.info(f"Device {device} is used!\n")
+warnings.filterwarnings("ignore", category=InputDataWarning)
+def main(
+        trial: int,
+        algo: str,
+        num_iter: int,
+        n_init_evals: int,
+        param_truth: str | list[float],
+        noisy_ground_truth_peak: float | None = None,
+        manual_init_evals: list[list[float]] | None = None,
+) -> None: 
+        """Run one replication for STO38 experiment   
+
+        Args:
+            trial: Seed of the trial.
+            algo: Algorithm to use. Supported algorithms: "EI", "KG", "EICF", "Random".
+            num_iter: number of maximum BO iterations
+            param1: Thickness
+            param2: Tilt-x
+            param3: Tilt-y
+            noisy_ground_truth_peak: max photon count (controls noise level)
+            manual_init_evals: list of lists of initial evaluation points
+            
+        Returns:
+            None.
+        """
+        #TODO here are parameters to change for different experiments
+        overall_scaling_factor = 1000
+        eps_base = 10
+        eps_c = 1
+        run_date = datetime.today().strftime("%Y-%m-%d") 
+        seed = 42
+        image_pixel_rescaling = False # keep absolute (vacuum-calibrated) intensity; True divides each sim by its own sum
+        vacuum_ref_path = '/home/fs01/dy327/bott-data/log/20260922_Si/A_1750_vac_PACBED_rotated_cropped_corner57mrad.tif' # same rotation/crop as the ground truth
+        patch_format = 'square'
+        random.seed(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(seed)
+
+        logger.info(f'Rotated ground truth') # A: use 1758_PACBED_rotated_cropped_corner57mrad.tif
+
+        params_abTEM = {#todo: find a better way to enter parameters
+                # # Device configuration
+                # "device_abtem": 'gpu',#"cpu",
+
+                # Crystal structure input
+                "path_crystal": "/home/fs01/dy327/bott-data/log/20260922_Si/one_layer_Si_110_77A.cif",
+
+                # Potential parameters
+                "potential_extent_x": 77.3,  # Angstrom
+                "potential_extent_y": 77.3,  # Angstrom
+                "lateral_sampling": 0.115,  # Angstrom
+                "vertical_sampling": 3.8,
+                "potential_parametrization": "lobato",  # or "kirkland"
+                "potential_projection": "finite",       # or "infinite"
+                "vac_x": 0, # vacuum added
+
+                # Phonon parameters
+                "random_seed": 42,
+                "use_frozen_phonon": False,
+                "num_phonon_configs": 20,
+                "phonon_sigma": {
+                    'Si': 0.1,
+                },
+
+                # Probe parameters
+                "energy": 300e3,  # in eV
+                "convergence_angle": 30.0,  # mrad
+                "df": 0,
+                "aberrations": {},
+
+                "detector_angle": 40.1, #'cutoff', # mrad
+
+                # Scan parameters
+                "scan_step_size": 0.3,  # angstrom
+                "return_pacbed": True,
+            }
+        print_system_info()
+
+        #todo: make it into a function and put it in io.py
+        if isinstance(param_truth, str):
+            ground_truth = load_tif(param_truth)
+            vacuum_ref = load_tif(vacuum_ref_path) # same rotation/crop as the ground truth
+            assert vacuum_ref.shape == ground_truth.shape, (vacuum_ref.shape, ground_truth.shape)
+            beam_fraction = ground_truth.sum()/vacuum_ref.sum() # fraction of the incident beam inside the crop (exp)
+
+            sim_vac = simulate_cbed(1,0,0, params_abTEM, scan_coords=[[35,35],[40,40]]) # thin (~vacuum) simulation
+            imgshape = sim_vac.shape
+            originshape = ground_truth.shape
+            #todo: the guide should ensure the experimental pacbed to be centered & square.
+            ground_truth = ndimage.zoom(ground_truth, 
+                                        (imgshape[0]/originshape[0], 
+                                        imgshape[1]/originshape[1]), order=3)
+            ground_truth = torch.Tensor(ground_truth)
+            # vacuum-calibrated: sum(GT) = exp beam fraction x sim vacuum sum, i.e. the same units as the raw simulation
+            ground_truth = (ground_truth / ground_truth.sum())*beam_fraction*float(sim_vac.sum())*overall_scaling_factor
+            logger.info(f'Vacuum calibration: exp beam fraction {beam_fraction:.4f}, sim vacuum sum {sim_vac.sum():.4f}')
+            problem_name = f"A_eps_base_{eps_base}"
+
+        elif isinstance(param_truth, list):
+            ground_truth = torch.Tensor(simulate_cbed(param_truth[0],param_truth[1],
+                                                  param_truth[2], params_abTEM,
+                                                  device_simu='gpu')) # abtem takes "cpu" or "gpu"
+            ground_truth = ground_truth*overall_scaling_factor # raw sim units, consistent with image_pixel_rescaling = False
+            problem_name = f"GT_{param_truth[0]}_{param_truth[1]}_{param_truth[2]}_eps_base_{eps_base}"
+        else:
+              raise ValueError("param_truth should be a list of 3 floats or a string path to the image.")
+        if noisy_ground_truth_peak is not None and noisy_ground_truth_peak > 0:
+            ground_truth_original = ground_truth.clone()
+            logger.info(f"Considering noisy ground truth with peak {noisy_ground_truth_peak}")
+            logger.info(f"ground_truth (max, min) before adding noise: ({torch.max(ground_truth)}, {torch.min(ground_truth)}) with shape {ground_truth.shape}")
+            ground_truth = add_poisson_noise(image=ground_truth, peak=noisy_ground_truth_peak)
+            logger.info(f"ground_truth (max, min) after adding noise: ({torch.max(ground_truth)}, {torch.min(ground_truth)}) with shape {ground_truth.shape}")
+            is_noisy_ground_truth = f"noisy_{noisy_ground_truth_peak}"
+            problem_name = problem_name + f"_noisy_{noisy_ground_truth_peak}"
+        else:
+            ground_truth_original = ground_truth.clone()
+            logger.info("No noisy ground truth considered")
+            is_noisy_ground_truth = "nonoise"
+            problem_name = problem_name + f"_nonoise"
+
+        if patch_format == "domain":
+            sf_quad = 4303
+            sf_cent = 7440
+            temp = torch.Tensor([sf_cent, sf_quad, sf_quad, sf_quad, sf_quad])
+            sf_factor = torch.sqrt(temp)
+            reduction_kwargs = {'radius':0.31}
+        elif patch_format == 'square':
+            num_tiles =  3 #num_tiles x num_tiles square tiles for square
+            sf_square = (317/num_tiles)*(317/num_tiles) #sim is 469x475
+            temp = torch.Tensor([sf_square]*num_tiles**2)
+            sf_factor = torch.sqrt(temp)
+            reduction_kwargs = {'num_tiles':num_tiles}
+        elif patch_format == 'domain8quad':
+            temp = torch.Tensor([1763., 1859., 1859., 1959., 4321., 4303., 4303., 4282]) #need edit
+            sf_factor = torch.sqrt(temp)
+            reduction_kwargs = {'radius':0.37, 'reduce': 'mean'}
+
+
+        # OptimizationProblem would keep all the tensor on the specified device
+        problem = OptimizationProblem(ground_truth=ground_truth,
+                                    output_path='/home/fs01/dy327/bott-data/log/20260922_Si/', 
+                                    save_results=True, 
+                                    reduction_params={'reduction_type':patch_format, 
+                                                    'reduction_kwargs':reduction_kwargs},
+                                    loss_params={'loss_type':'SSE', 'dp_pow': 1}, 
+                                    norm_arr=False,
+                                    dim=3, 
+                                    bounds=[(10,500), (-10, 10), (-10,10)],
+                                    noise_std=0,
+                                    dtype=torch.float64, 
+                                    device=device,
+                                    params_abtem = params_abTEM,
+                                    scale_factor=sf_factor,
+                                    safe_div_th_cnst = [0.2,200],
+                                    scan_coords = [[35,35],[40,40]],
+                                    overall_scaling_factor = overall_scaling_factor,
+                                    ) # "cpu" or "cuda" for physics simulation
+        if manual_init_evals is not None:
+            logger.info(f'\nmanual_init_evals {manual_init_evals}')
+            run_one_trial(problem_name=problem_name+'_SSE_dppow1_noNorm_init_'+str(n_init_evals)+'_manual_'+str(len(manual_init_evals))+'_'+is_noisy_ground_truth+'_overall_scale_factor_'+str(overall_scaling_factor)+'_run_date_'+run_date, 
+                    problem=problem, 
+                    algo=algo, 
+                    trial=trial, 
+                    n_init_evals=n_init_evals, 
+                    max_iter=num_iter, 
+                    objective=None,
+                    dtype=torch.float64,
+                    device_botorch=device,
+                    manual_init_evals = manual_init_evals,
+                    ground_truth_original = ground_truth_original,
+                    eps_base = eps_base,
+                    eps_c = eps_c,
+                    image_pixel_rescaling = image_pixel_rescaling,
+                    )
+        else:
+            run_one_trial(problem_name=problem_name+'_SSE_dppow1_noNorm_init_'+str(n_init_evals)+'_'+is_noisy_ground_truth+'_overall_scale_factor_'+str(overall_scaling_factor)+'_run_date_'+run_date, 
+                    problem=problem, 
+                    algo=algo, 
+                    trial=trial,
+                    n_init_evals=n_init_evals, 
+                    max_iter=num_iter, 
+                    objective=None,
+                    dtype=torch.float64,
+                    device_botorch=device,  
+                    ground_truth_original = ground_truth_original,
+                    eps_base = eps_base,
+                    eps_c = eps_c,
+                    image_pixel_rescaling = image_pixel_rescaling,
+                    )
+
+
+if __name__ == "__main__":
+    args = parse()
+    main(**vars(args))
