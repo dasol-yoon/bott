@@ -197,4 +197,13 @@ def simulate_cbed(thickness, tilt_x, tilt_y, params_abtem=None,
     if device_simu == 'gpu':
         measurement = measurement.get()
     
+    # Resize the simulation output to the target shape (for example, the ground truth shape).
+    # Keep the total intensity the same after the resize.
+    output_shape = params_abtem.get("output_shape")
+    if output_shape is not None and tuple(measurement.shape[-2:]) != tuple(output_shape):
+        from scipy import ndimage
+        zoom_factors = (output_shape[0]/measurement.shape[-2], output_shape[1]/measurement.shape[-1])
+        measurement = ndimage.zoom(measurement, (1,)*(measurement.ndim-2) + zoom_factors, order=3)
+        measurement = measurement / (zoom_factors[0]*zoom_factors[1])
+
     return measurement

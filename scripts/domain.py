@@ -103,13 +103,8 @@ def main(
         #todo: make it into a function and put it in io.py
         if isinstance(param_truth, str):
               ground_truth = load_img(param_truth)
-
-              imgshape = simulate_cbed(1,0,0, params_abTEM).shape
-              originshape = ground_truth.shape
               #todo: the guide should ensure the experimental pacbed to be centered & square.
-              ground_truth = ndimage.zoom(ground_truth, 
-                                          (imgshape[0]/originshape[0], 
-                                           imgshape[1]/originshape[1]), order=3)
+              params_abTEM["output_shape"] = ground_truth.shape # resize the simulation output to the ground truth shape
               ground_truth = torch.Tensor(ground_truth)
               ground_truth = (ground_truth / ground_truth.sum())*overall_scaling_factor #3/18/2026 added overall scaling factor to scale up the image output
               problem_name = f"EXP_sto_quad8_eps_{eps_bound}"
