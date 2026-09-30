@@ -201,8 +201,8 @@ def run_one_trial(
         input_params = X.tolist()
         logger.info(f'Initial evaluations ({X.shape[0]} points): {X}') #20260210
         outputs_np = np.array([problem.get_physics_simu(*param,params_abtem_alt=params_abTEM,device_alt=problem.device) for param in input_params])
-        logging.info(f'applying gaussian filter to the image output 7/23/2026')
-        outputs_np = gaussian_filter(outputs_np, sigma=1) # added gaussian filter to the image output 7/23/2026
+        # logging.info(f'applying gaussian filter to the image output 7/23/2026')
+        # outputs_np = gaussian_filter(outputs_np, sigma=1) # added gaussian filter to the image output 7/23/2026
         image_output = torch.tensor(outputs_np, dtype=dtype, device=device)
         logging.info(f'Overall scaling factor applied (to bring up the scale of the image output): {problem.overall_scaling_factor}')
         logging.info(f'Image output (max, min) before scaling: ({torch.max(image_output)}, {torch.min(image_output)})')
@@ -287,8 +287,8 @@ def run_one_trial(
         input_param = new_x.tolist()[0] # [value0, value1, value2]
         time_simu_start = time_sync()
         image_temp = problem.get_physics_simu(*input_param,params_abtem_alt=params_abTEM,device_alt=problem.device)
-        logging.info(f'applying gaussian filter to the image output 7/23/2026')
-        image_temp = gaussian_filter(image_temp, sigma=1) # added gaussian filter to the image output 7/23/2026
+        # logging.info(f'applying gaussian filter to the image output 7/23/2026')
+        # image_temp = gaussian_filter(image_temp, sigma=1) # added gaussian filter to the image output 7/23/2026
         image_temp = torch.from_numpy(image_temp).to(
             dtype=dtype,
             device=device,
