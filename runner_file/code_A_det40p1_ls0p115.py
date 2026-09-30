@@ -1,10 +1,18 @@
 #edited 20250513 cluster
+import argparse
 import random
+import sys
+from pathlib import Path
 import numpy as np
 from datetime import datetime
 import json
 import logging
 import warnings
+# Ensure project root is on PYTHONPATH so "bott" can be imported when run via SLURM
+_project_root = Path(__file__).resolve().parent.parent
+if str(_project_root) not in sys.path:
+    sys.path.insert(0, str(_project_root))
+
 from bott.utils import add_poisson_noise
 import torch
 from botorch.exceptions import InputDataWarning
@@ -36,6 +44,7 @@ def main(
         param_truth: str | list[float],
         noisy_ground_truth_peak: float | None = None,
         manual_init_evals: list[list[float]] | None = None,
+        eps_c: float | None = None,
 ) -> None: 
         """Run one replication for STO38 experiment   
 
@@ -55,11 +64,15 @@ def main(
         #TODO here are parameters to change for different experiments
         overall_scaling_factor = 1000
         eps_base = 10
-        eps_c = 1
+        if eps_c is None:
+            eps_c = 1
+        logger.info(f'Epsilon bound: {eps_base}')
+        logger.info(f'Epsilon c: {eps_c}')
         run_date = datetime.today().strftime("%Y-%m-%d") 
         seed = 42
         image_pixel_rescaling = False # keep absolute (vacuum-calibrated) intensity; True divides each sim by its own sum
-        vacuum_ref_path = '/home/fs01/dy327/bott-data/log/20260922_Si/A_1750_vac_PACBED_rotated_cropped_corner57mrad.tif' # same rotation/crop as the ground truth
+        # vacuum_ref_path = '/home/fs01/dy327/bott-data/log/20260922_Si/A_1750_vac_PACBED_rotated_cropped_corner57mrad.tif' # same rotation/crop as the ground truth
+        vacuum_ref_path = '/home/pb482/bott/data/A_1750_vac_PACBED_rotated_cropped_corner57mrad.tif' # same rotation/crop as the ground truth
         patch_format = 'square'
         random.seed(seed)
         np.random.seed(seed)
@@ -75,7 +88,8 @@ def main(
                 # "device_abtem": 'gpu',#"cpu",
 
                 # Crystal structure input
-                "path_crystal": "/home/fs01/dy327/bott-data/log/20260922_Si/one_layer_Si_110_77A.cif",
+                # "path_crystal": "/home/fs01/dy327/bott-data/log/20260922_Si/one_layer_Si_110_77A.cif",
+                "path_crystal": "/home/pb482/bott/data/one_layer_Si_110_77A.cif",
 
                 # Potential parameters
                 "potential_extent_x": 77.3,  # Angstrom
@@ -122,14 +136,14 @@ def main(
             # vacuum-calibrated: sum(GT) = exp beam fraction x sim vacuum sum, i.e. the same units as the raw simulation
             ground_truth = (ground_truth / ground_truth.sum())*beam_fraction*float(sim_vac.sum())*overall_scaling_factor
             logger.info(f'Vacuum calibration: exp beam fraction {beam_fraction:.4f}, sim vacuum sum {sim_vac.sum():.4f}')
-            problem_name = f"A_eps_base_{eps_base}"
+            problem_name = f"A_eps_base_{eps_base}_eps_c_{eps_c}"
 
         elif isinstance(param_truth, list):
             ground_truth = torch.Tensor(simulate_cbed(param_truth[0],param_truth[1],
                                                   param_truth[2], params_abTEM,
                                                   device_simu='gpu')) # abtem takes "cpu" or "gpu"
             ground_truth = ground_truth*overall_scaling_factor # raw sim units, consistent with image_pixel_rescaling = False
-            problem_name = f"GT_{param_truth[0]}_{param_truth[1]}_{param_truth[2]}_eps_base_{eps_base}"
+            problem_name = f"GT_{param_truth[0]}_{param_truth[1]}_{param_truth[2]}_eps_base_{eps_base}_eps_c_{eps_c}"
         else:
               raise ValueError("param_truth should be a list of 3 floats or a string path to the image.")
         if noisy_ground_truth_peak is not None and noisy_ground_truth_peak > 0:
@@ -218,5 +232,10 @@ def main(
 
 
 if __name__ == "__main__":
+    # Parsed here so the shared parser used by the other runners stays unchanged.
+    eps_parser = argparse.ArgumentParser(add_help=False)
+    eps_parser.add_argument("--eps_c", type=float, default=None)
+    eps_args, remaining = eps_parser.parse_known_args()
+    sys.argv = [sys.argv[0], *remaining]
     args = parse()
-    main(**vars(args))
+    main(**vars(args), eps_c=eps_args.eps_c)
