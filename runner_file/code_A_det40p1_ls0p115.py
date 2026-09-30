@@ -115,13 +115,9 @@ def main(
             assert vacuum_ref.shape == ground_truth.shape, (vacuum_ref.shape, ground_truth.shape)
             beam_fraction = ground_truth.sum()/vacuum_ref.sum() # fraction of the incident beam inside the crop (exp)
 
-            sim_vac = simulate_cbed(1,0,0, params_abTEM, scan_coords=[[35,35],[40,40]]) # thin (~vacuum) simulation
-            imgshape = sim_vac.shape
-            originshape = ground_truth.shape
             #todo: the guide should ensure the experimental pacbed to be centered & square.
-            ground_truth = ndimage.zoom(ground_truth, 
-                                        (imgshape[0]/originshape[0], 
-                                        imgshape[1]/originshape[1]), order=3)
+            params_abTEM["output_shape"] = ground_truth.shape # resize the simulation output to the ground truth shape
+            sim_vac = simulate_cbed(1,0,0, params_abTEM, scan_coords=[[35,35],[40,40]]) # thin (~vacuum) simulation
             ground_truth = torch.Tensor(ground_truth)
             # vacuum-calibrated: sum(GT) = exp beam fraction x sim vacuum sum, i.e. the same units as the raw simulation
             ground_truth = (ground_truth / ground_truth.sum())*beam_fraction*float(sim_vac.sum())*overall_scaling_factor
@@ -158,7 +154,7 @@ def main(
             reduction_kwargs = {'radius':0.31}
         elif patch_format == 'square':
             num_tiles =  3 #num_tiles x num_tiles square tiles for square
-            sf_square = (317/num_tiles)*(317/num_tiles) #sim is 469x475
+            sf_square = (80/num_tiles)*(80/num_tiles) #GT (and resized sim) is 80x80
             temp = torch.Tensor([sf_square]*num_tiles**2)
             sf_factor = torch.sqrt(temp)
             reduction_kwargs = {'num_tiles':num_tiles}
