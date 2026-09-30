@@ -61,7 +61,7 @@ def main(
         run_date = datetime.today().strftime("%Y-%m-%d") #22/04/2026 for new composite form
         seed = 42
         image_pixel_rescaling = False
-        patch_format = "square"
+        patch_format = "domain"
         random.seed(seed)
         np.random.seed(seed)
         torch.manual_seed(seed)
