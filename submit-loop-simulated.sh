@@ -1,16 +1,16 @@
 #!/bin/sh
 
-for trial in $(seq 1 1 1)
+for trial in $(seq 1 1 20)
 do
-    for algo in EICF
+    for algo in EI KG
     do
         for num_iter in 50
         do
-            for param_truth in "200 3 -5" 
+            for param_truth in "100 1.5 -1.5" 
             do
                 for n_init_evals in 7
                 do
-                    for noisy_ground_truth_peak in 50 
+                    for noisy_ground_truth_peak in 0 50 100 150 
                     do
                     sbatch -J simulated_trial_${trial}_algo_${algo}_noisy_${noisy_ground_truth_peak} \
                         -o ./logs/simulated_trial_${trial}_algo_${algo}_noisy_${noisy_ground_truth_peak}_%j.out \

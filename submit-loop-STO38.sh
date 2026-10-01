@@ -2,7 +2,7 @@
 
 for trial in $(seq 1 1 20)
 do
-    for algo in EICF EI KG Random
+    for algo in EI KG
     do
         for num_iter in 50
         do
