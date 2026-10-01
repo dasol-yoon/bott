@@ -415,11 +415,11 @@ def get_new_sample(model,algo, problem,best_val,objective, device='cpu', dtype=t
     
     if algo == 'EI':
         acqf = LogExpectedImprovement(model=model,best_f=best_val)
-        new_x, acqf_val = optimize_acqf(acq_function=acqf,bounds=problem.bounds.to(dtype=dtype, device=device),q=1,num_restarts=20,raw_samples=100)        
+        new_x, acqf_val = optimize_acqf(acq_function=acqf,bounds=problem.bounds.to(dtype=dtype, device=device),q=1,num_restarts=50,raw_samples=100)        
         return new_x, acqf_val
     elif algo == 'KG':  
         acqf = qKnowledgeGradient(model, num_fantasies=16)
-        new_x, acqf_val = optimize_acqf(acq_function=acqf,bounds=problem.bounds.to(dtype=dtype, device=device),q=1,num_restarts=20,raw_samples=100)
+        new_x, acqf_val = optimize_acqf(acq_function=acqf,bounds=problem.bounds.to(dtype=dtype, device=device),q=1,num_restarts=50,raw_samples=100)
         return new_x, acqf_val 
     elif algo == 'EICF':
         sampler = SobolQMCNormalSampler(torch.Size([512])).to(dtype=dtype, device=device)
