@@ -104,7 +104,7 @@ def run_one_trial(
     Args:
         problem_name: tile pattern name
         problem: A problem class that defines which tile pattern to use
-        algo: A string representing the name of the algorithm: [EI, KG, Random, EICF, EICFT]
+        algo: A string representing the name of the algorithm: [EI, KG, Random, EICF, PSBOCF, TS]
         trial: The seed of the trial
         metrics: A list of metrics to record: ['pos_mean', 'obs_val']
         n_init_evals: The number of initial evaluations
@@ -132,7 +132,20 @@ def run_one_trial(
     measurement_true = problem.measurement_true.to(device)
     params_abTEM = problem.params_abtem
 
-    if objective is None:
+    if algo == 'PSBOCF':
+        # Model 2: GPs on the scalar patch SSE and the correction terms.
+        # pixelSSE = patchSSE * epsilon + delta, with epsilon clipped to [eps_base^-eps_c, eps_base^eps_c].
+        logging.info(
+            f'(FOR PSBOCF) Using pixelSSE = patchSSE*epsilon + delta. '
+            f'Surrogate outputs are scalar patch SSE, epsilon, and delta. '
+            f'Epsilon is clipped to [{eps_base ** (-eps_c)}, {eps_base ** eps_c}]'
+        )
+        objective = GenericMCObjective(
+            lambda Y, X=None: -1 * (
+                Y[..., 0] * torch.clamp(Y[..., 1], eps_base ** (-eps_c), eps_base ** eps_c) + Y[..., 2]
+            )
+        )
+    elif objective is None:
         #TODO: Always check if the bounds are correct for the configuration you are using.
         logging.info(f'(FOR EICF) Using pixelSSE(x) = patchSSE(x)*epsilon(x) + delta(x) composite form, where epsilon(x) and delta(x) are from solving minimization problem! Epsilon(x) is clipped to [0.1, 10]')
         objective = GenericMCObjective(lambda Y, X=None: -1*((loss_func(Y[...,:-2].to(device), reduction_true.to(device),reduce=True)*torch.clamp(Y[...,-2], eps_base**(-eps_c), eps_base**(eps_c)))+Y[...,-1])) #3/18/2026 added overall scaling factor to scale up the image output
@@ -168,7 +181,7 @@ def run_one_trial(
         torch.set_rng_state(res["random_states"]["torch"])
         np.random.set_state(res["random_states"]["numpy"])
         random.setstate(res["random_states"]["random"])
-        if algo == 'EICF':
+        if algo in ('EICF', 'PSBOCF'):
             y_value = res['y_value']
         best_val = obj.max()
         n_init_evals = X.shape[0]
@@ -235,8 +248,16 @@ def run_one_trial(
             # y_value = torch.cat((y_reduction,delta),dim=-1) # test linear form 02/12/2026 pb
             epsilon, delta = solve(pixelSSE_val=pixelLoss, patchSSE_val=reductionLoss,eps_base=eps_base,eps_c=eps_c) #2/11/2026 for new composite to control epsilon behavior
             y_value = torch.cat((y_reduction,epsilon,delta),dim=-1) # 02/25/2026 use epsilon for epsilon
-            logging.info(f'(For EICF) Initial intermediate outputs (patch, epsilon, delta): {y_value}') 
-            
+            logging.info(f'(For EICF) Initial intermediate outputs (patch, epsilon, delta): {y_value}')
+        elif algo == 'PSBOCF':
+            y_reduction = (problem.reduction_func(image_output).to(device))*problem.scaling_factor.to(device)
+            reductionLoss = loss_func(y_simu=y_reduction,
+                            y_true=reduction_true,
+                            reduce=False).unsqueeze(-1) # [n_init, 1]
+            epsilon, delta = solve(pixelSSE_val=pixelLoss, patchSSE_val=reductionLoss,eps_base=eps_base,eps_c=eps_c)
+            # Model 2 outputs: scalar patch SSE, epsilon, delta.
+            y_value = torch.cat((reductionLoss, epsilon, delta), dim=-1)
+            logging.info(f'(For PSBOCF) Initial intermediate outputs (patch SSE, epsilon, delta): {y_value}') 
         obj = -1*pixelLoss # maximization direction
         best_val = obj.max() # tensor
         best_idx = torch.argmax(obj.squeeze(-1))
@@ -324,17 +345,18 @@ def run_one_trial(
             epsilon, delta = solve(pixelSSE_val=new_Loss, patchSSE_val=reductionLoss,eps_base=eps_base,eps_c=eps_c) #2/11/2026 for new composite to control epsilon behavior
             y_temp = torch.cat((y_reduction.unsqueeze(0),epsilon,delta),dim=-1) #02/25/2026 use epsilon for epsilon
             logging.info(f'y_temp for new input (patch, epsilon, delta) {y_temp}')
-
-            # the following is for linear form
-            # delta = new_Loss - reductionLoss
-            # y_temp = torch.cat((y_reduction.unsqueeze(0),delta),dim=-1) # 02/17/2026 use delta form
-            # logging.info(f"y_temp (linear form) {y_temp}") # 02/17/2026 use delta form
-
-            # the following is for composite form pixel=patch*exp(log(epsilon))+delta
-            # y_temp = torch.cat((y_reduction.unsqueeze(0),torch.log(epsilon),delta),dim=-1) #02/17/2026 use log for epsilon
-            # logging.info(f"y_temp (patch, log(epsilon), delta) {y_temp}")
-            
             y_value = torch.cat((y_value,y_temp),dim=0)
+        elif algo == 'PSBOCF':
+            logging.info('(PSBOCF) Using pixelSSE = patchSSE*epsilon + delta with a scalar patch SSE surrogate')
+            y_reduction = problem.reduction_func(image_temp).to(device)*problem.scaling_factor.to(device=device)
+            reductionLoss = loss_func(y_simu=y_reduction.unsqueeze(0),
+                                    y_true=reduction_true,
+                                    reduce=False).unsqueeze(0)
+            logging.info(f'(PSBOCF) reductionLoss (patch SSE) for new input: {reductionLoss}')
+            epsilon, delta = solve(pixelSSE_val=new_Loss, patchSSE_val=reductionLoss,eps_base=eps_base,eps_c=eps_c)
+            y_temp = torch.cat((reductionLoss, epsilon, delta), dim=-1)
+            logging.info(f'(PSBOCF) y_temp for new input (patch SSE, epsilon, delta) {y_temp}')
+            y_value = torch.cat((y_value, y_temp), dim=0)
         
         # Display and save results
         obj = -1*pixelLoss
@@ -358,7 +380,7 @@ def run_one_trial(
         logger.info(f"Best point found: {best_params}")
         logger.info(f"Best objective function value (-pixelSSE) found: {best_val}")
         logger.info(f"==========================================================")
-        if algo == 'EICF':
+        if algo in ('EICF', 'PSBOCF'):
             train_Y = y_value
             BO_results = {
                 "ground_truth":problem.measurement_true,
@@ -421,11 +443,11 @@ def get_new_sample(model,algo, problem,best_val,objective, device='cpu', dtype=t
         acqf = qKnowledgeGradient(model, num_fantasies=16)
         new_x, acqf_val = optimize_acqf(acq_function=acqf,bounds=problem.bounds.to(dtype=dtype, device=device),q=1,num_restarts=50,raw_samples=100)
         return new_x, acqf_val 
-    elif algo == 'EICF':
+    elif algo in ('EICF', 'PSBOCF'):
         sampler = SobolQMCNormalSampler(torch.Size([512])).to(dtype=dtype, device=device)
-        EICF = qLogExpectedImprovement(model=model, best_f=best_val, objective=objective,sampler=sampler).to(dtype=dtype, device=device)
+        acqf = qLogExpectedImprovement(model=model, best_f=best_val, objective=objective,sampler=sampler).to(dtype=dtype, device=device)
         new_x, acqf_val = optimize_acqf(
-            acq_function=EICF,
+            acq_function=acqf,
             bounds=problem.bounds.to(dtype=dtype, device=device),
             q=1,
             num_restarts=50,
@@ -450,7 +472,7 @@ def get_new_sample(model,algo, problem,best_val,objective, device='cpu', dtype=t
         ).to(dtype=dtype, device=device)
         return new_x, None
     else:
-        raise ValueError(f"The current implementation does not support algo = '{algo}', please use either 'EI, 'EICF', or 'Random'")
+        raise ValueError(f"The current implementation does not support algo = '{algo}', please use either 'EI', 'KG', 'EICF', 'PSBOCF', 'TS', or 'Random'")
 
 def parse():
     """Parse command line arguments."""

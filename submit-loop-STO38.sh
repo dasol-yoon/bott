@@ -2,7 +2,7 @@
 
 for trial in $(seq 1 1 20)
 do
-    for algo in EI KG
+    for algo in PSBOCF
     do
         for num_iter in 50
         do

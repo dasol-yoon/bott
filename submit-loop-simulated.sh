@@ -2,11 +2,11 @@
 
 for trial in $(seq 1 1 20)
 do
-    for algo in EI KG
+    for algo in PSBOCF
     do
         for num_iter in 50
         do
-            for param_truth in "100 1.5 -1.5" 
+            for param_truth in "380 1.5 -1.5" "200 3 -5"
             do
                 for n_init_evals in 7
                 do
