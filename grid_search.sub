@@ -1,0 +1,25 @@
+#!/bin/bash
+#SBATCH --job-name=grid_search
+#SBATCH --mail-type=END,FAIL
+#SBATCH --mail-user=pb482@cornell.edu
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --mem=64G
+#SBATCH --cpus-per-task=4
+#SBATCH --time=24:00:00
+#SBATCH --partition=default_partition
+#SBATCH --gres=gpu:1
+#SBATCH --exclude=jjs533-compute-03,lil-compute-05,bhattacharjee-compute-02,unicorn-compute-03,unicorn-compute-05,desa-compute-01,seo-compute-02,shmatikov-compute-01,taylor-compute-01,dgx2-compute-03,sablab-gpu-09,goodfellow,harpo,dgx2-compute-04,rush-compute-01,owens-compute-01,badfellow,eas-shared-compute-01,genai-large-01,abdelfattah-compute-03,abdelfattah-compute-02
+
+task=$1
+
+echo "Task: $task"
+echo "Job ID: $SLURM_JOB_ID"
+echo "Node: $(hostname)"
+echo "Started at: $(date)"
+
+if [ "$task" = "gt" ]; then
+    /home/pb482/miniconda3/envs/bott/bin/python /home/pb482/bott/runner_file/grid_search_runner.py --mode gt
+else
+    /home/pb482/miniconda3/envs/bott/bin/python /home/pb482/bott/runner_file/grid_search_runner.py --mode eval --job_id "$task"
+fi
