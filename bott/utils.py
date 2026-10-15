@@ -324,3 +324,16 @@ def add_poisson_noise(image, peak=100):
     noisy = noisy_norm * (max_val - min_val) + min_val
 
     return noisy
+def measure_bf_disk_radius(img, threshold=0.5):
+    """
+    Radius [px] of the bright-field disk, from the area of the connected region above threshold*max.
+    Use on a vacuum (or thin) pattern; angular sampling [mrad/px] = convergence_angle / radius.
+    """
+    from scipy import ndimage
+    img = np.asarray(img, dtype=float)
+    mask = img > threshold*img.max()
+    labels, n = ndimage.label(mask)
+    if n > 1: # keep the largest region (the disk), drop hot pixels
+        sizes = ndimage.sum(mask, labels, range(1, n + 1))
+        mask = labels == (np.argmax(sizes) + 1)
+    return float(np.sqrt(mask.sum()/np.pi))

@@ -21,7 +21,7 @@ from bott.optimization import run_one_trial, parse
 from bott.physics_models import simulate_cbed
 from bott.problem import OptimizationProblem
 from bott.io import load_img, load_tif
-from bott.utils import print_system_info
+from bott.utils import print_system_info, measure_bf_disk_radius
 
 from scipy import ndimage
 
@@ -65,7 +65,7 @@ def main(
         overall_scaling_factor = 1000
         eps_base = 10
         if eps_c is None:
-            eps_c = 1
+            eps_c = 1.5 # clamp eps to [10^-1.5, 10^1.5]; Si A pixel/patch ratio was 6-17 over 19 sims (2026-10-14), 10 clamped about half of them
         logger.info(f'Epsilon bound: {eps_base}')
         logger.info(f'Epsilon c: {eps_c}')
         run_date = datetime.today().strftime("%Y-%m-%d") 
@@ -130,7 +130,10 @@ def main(
             beam_fraction = ground_truth.sum()/vacuum_ref.sum() # fraction of the incident beam inside the crop (exp)
 
             #todo: the guide should ensure the experimental pacbed to be centered & square.
-            params_abTEM["output_shape"] = ground_truth.shape # resize the simulation output to the ground truth shape
+            params_abTEM["output_shape"] = ground_truth.shape # resample the simulation output onto the ground truth grid
+            exp_disk_radius = measure_bf_disk_radius(vacuum_ref) # px
+            params_abTEM["output_angular_sampling"] = params_abTEM["convergence_angle"]/exp_disk_radius # mrad/px of the exp pattern, calibrated from the BF disk
+            logger.info(f'Exp BF disk radius {exp_disk_radius:.3f} px -> {params_abTEM["output_angular_sampling"]:.4f} mrad/px')
             sim_vac = simulate_cbed(1,0,0, params_abTEM, scan_coords=[[35,35],[40,40]]) # thin (~vacuum) simulation
             ground_truth = torch.Tensor(ground_truth)
             # vacuum-calibrated: sum(GT) = exp beam fraction x sim vacuum sum, i.e. the same units as the raw simulation

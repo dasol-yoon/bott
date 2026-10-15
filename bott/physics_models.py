@@ -200,10 +200,53 @@ def simulate_cbed(thickness, tilt_x, tilt_y, params_abtem=None,
     # Resize the simulation output to the target shape (for example, the ground truth shape).
     # Keep the total intensity the same after the resize.
     output_shape = params_abtem.get("output_shape")
-    if output_shape is not None and tuple(measurement.shape[-2:]) != tuple(output_shape):
+    output_angular_sampling = params_abtem.get("output_angular_sampling") # mrad/px of the target (e.g. experimental) grid
+    if output_shape is not None and output_angular_sampling is not None:
+        # resample by scattering angle, so the sim and target grids agree in mrad (not just in pixel count)
+        measurement = resample_to_angular_grid(measurement, cbeds.angular_sampling, output_shape, output_angular_sampling)
+    elif output_shape is not None and tuple(measurement.shape[-2:]) != tuple(output_shape):
         from scipy import ndimage
         zoom_factors = (output_shape[0]/measurement.shape[-2], output_shape[1]/measurement.shape[-1])
         measurement = ndimage.zoom(measurement, (1,)*(measurement.ndim-2) + zoom_factors, order=3)
         measurement = measurement / (zoom_factors[0]*zoom_factors[1])
 
     return measurement
+
+def resample_to_angular_grid(measurement, input_sampling, output_shape, output_sampling, oversample=8):
+    '''
+    Area-weighted resampling of diffraction pattern(s) onto a grid with a given angular sampling.
+
+    Both grids are assumed centered on the optical axis: index n//2 for the (fftshifted) abTEM grid
+    and (M-1)/2 for the target grid (e.g. the centered, cropped experimental pattern).
+    The total intensity inside the common angular range is conserved.
+
+    Args:
+        measurement: array (..., ny, nx) on the input grid
+        input_sampling: (dky, dkx) of the input grid in mrad/px (abTEM `angular_sampling`)
+        output_shape: (My, Mx) of the target grid
+        output_sampling: mrad/px of the target grid, scalar or (dky, dkx)
+        oversample: sub-pixels per output pixel along each axis used for the area average
+    '''
+    import numpy as np
+    from scipy import ndimage
+
+    input_sampling = np.broadcast_to(np.asarray(input_sampling, dtype=float), (2,))
+    output_sampling = np.broadcast_to(np.asarray(output_sampling, dtype=float), (2,))
+    in_shape = measurement.shape[-2:]
+
+    coords = []
+    for ax in range(2):
+        m = output_shape[ax]
+        edges = (np.arange(m + 1) - 0.5 - (m - 1)/2) * output_sampling[ax] # output pixel edges in mrad
+        fine = np.linspace(edges[0], edges[-1], m*oversample + 1)
+        centers = (fine[:-1] + fine[1:])/2
+        coords.append(centers/input_sampling[ax] + in_shape[ax]//2) # fractional index on the input grid
+    grid = np.meshgrid(*coords, indexing='ij')
+
+    flat = measurement.reshape((-1,) + tuple(in_shape))
+    out = np.empty((flat.shape[0],) + tuple(output_shape), dtype=measurement.dtype)
+    for i, img in enumerate(flat):
+        fine_img = ndimage.map_coordinates(img, grid, order=1, mode='constant', cval=0.0)
+        out[i] = fine_img.reshape(output_shape[0], oversample, output_shape[1], oversample).mean(axis=(1, 3))
+    out *= np.prod(output_sampling/input_sampling) # intensity per pixel scales with the pixel solid angle
+    return out.reshape(measurement.shape[:-2] + tuple(output_shape))
